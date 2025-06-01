@@ -1,0 +1,106 @@
+
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+
+    :root {
+      --background: 210 40% 98%; /* Light Grayish Blue */
+      --foreground: 224 71% 4%; /* Dark Slate Blue */
+      
+      --card: 0 0% 100%; /* White */
+      --card-foreground: 224 71% 4%; /* Dark Slate Blue */
+      
+      --popover: 0 0% 100%; /* White */
+      --popover-foreground: 224 71% 4%; /* Dark Slate Blue */
+      
+      --primary: 205 90% 45%; /* Bright Blue */
+      --primary-foreground: 0 0% 100%; /* White */
+      
+      --secondary: 210 20% 85%; /* Light Gray */
+      --secondary-foreground: 224 71% 4%; /* Dark Slate Blue */
+      
+      --muted: 210 30% 94%; /* Very Light Gray */
+      --muted-foreground: 215 20% 45%; /* Medium Gray */
+      
+      --accent: 30 90% 55%; /* Bright Orange */
+      --accent-foreground: 0 0% 100%; /* White */
+      
+      --destructive: 0 72% 51%; /* Bright Red */
+      --destructive-foreground: 0 0% 100%; /* White */
+      
+      --border: 210 20% 88%; /* Light Gray Border */
+      --input: 210 20% 88%; /* Light Gray Input Border */
+      --ring: 205 90% 55%; /* Bright Blue Ring */
+      
+      --radius: 0.5rem; /* Standard radius */
+
+      --chart-green: 145 63% 42%; /* Green for income */
+      --chart-red: 0 72% 51%; /* Red for expenses */
+    }
+
+    .dark {
+      --background: 224 71% 4%; 
+      --foreground: 210 40% 98%;
+      
+      --card: 224 30% 12%;
+      --card-foreground: 210 40% 98%;
+      
+      --popover: 224 71% 4%;
+      --popover-foreground: 210 40% 98%;
+      
+      --primary: 205 80% 55%;
+      --primary-foreground: 224 71% 4%;
+      
+      --secondary: 224 20% 20%;
+      --secondary-foreground: 210 40% 98%;
+      
+      --muted: 224 20% 15%;
+      --muted-foreground: 210 30% 70%;
+      
+      --accent: 30 80% 65%;
+      --accent-foreground: 224 71% 4%;
+      
+      --destructive: 0 60% 50%;
+      --destructive-foreground: 210 40% 98%;
+      
+      --border: 224 20% 25%;
+      --input: 224 20% 25%;
+      --ring: 205 80% 55%;
+
+      --chart-green: 145 50% 50%;
+      --chart-red: 0 60% 60%;
+    }
+
+    body {
+      @apply bg-background text-foreground;
+      font-family: 'Arial', 'Helvetica Neue', Helvetica, sans-serif; /* Common Hebrew-friendly font */
+      direction: rtl; /* Right-to-left for Hebrew */
+    }
+    
+    /* Clean card style */
+    .clean-card {
+      @apply bg-card text-card-foreground rounded-xl shadow-lg border border-border;
+    }
+
+    /* Gradient text - adjusted for new theme */
+    .gradient-text {
+      @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+    }
+
+    /* Custom scrollbar for better aesthetics */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: hsl(var(--muted));
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: hsl(var(--secondary));
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: hsl(var(--primary) / 0.8);
+    }
+  
