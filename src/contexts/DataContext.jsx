@@ -95,13 +95,13 @@ export const DataProvider = ({ children }) => {
   }, [userId]);
 
   const addTransaction = async (transaction) => {
-    const id = transaction.id || generateId();
-    const newTransaction = { ...transaction, id };
-    setTransactions(prev => [...prev, newTransaction]);
-    if (db && userId) {
-      await setDoc(doc(db, 'users', userId, 'transactions', id), transaction);
-    }
-  };
+  const id = transaction.id || generateId();
+  const newTransaction = { ...transaction, id };
+  setTransactions(prev => [...prev, newTransaction]);
+  if (db && userId) {
+    await setDoc(doc(db, 'users', userId, 'transactions', id), newTransaction);
+  }
+};
 
   const addTransactions = async (transactionsArray) => {
     const newTransactions = transactionsArray.map(t => ({

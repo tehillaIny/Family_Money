@@ -1,6 +1,7 @@
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { createLogger, defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 const configHorizonsViteErrorHandler = `
 const observer = new MutationObserver((mutations) => {
@@ -183,8 +184,31 @@ logger.error = (msg, options) => {
 
 export default defineConfig({
 	customLogger: logger,
-	plugins: [react(), addTransformIndexHtml],
-	server: {
+	plugins: [
+		react(),
+		VitePWA({
+		  registerType: 'autoUpdate',  // הרישום האוטומטי של ה-service worker
+		  manifest: {
+			name: 'Family Money',
+			short_name: 'FamilyMoney',
+			description: 'ניהול תקציב משפחתי',
+			theme_color: '#3b82f6',
+			icons: [
+			  {
+				src: 'pwa-192x192.png',
+				sizes: '192x192',
+				type: 'image/png'
+			  },
+			  {
+				src: 'pwa-512x512.png',
+				sizes: '512x512',
+				type: 'image/png'
+			  }
+			]
+		  }
+		})
+	  ],	
+	  server: {
 		cors: true,
 		headers: {
 			'Cross-Origin-Embedder-Policy': 'credentialless',
