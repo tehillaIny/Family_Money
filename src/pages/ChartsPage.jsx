@@ -6,7 +6,7 @@ import { useData } from '@/hooks/useData.jsx';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { motion } from 'framer-motion';
-import { Tag, Calendar } from 'lucide-react';
+import { Tag, Calendar, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
 
 const ChartsPage = () => {
@@ -110,47 +110,137 @@ const ChartsPage = () => {
     );
   };
 
+  const totalIncome = chartData.reduce((sum, month) => sum + month.income, 0);
+  const totalExpenses = chartData.reduce((sum, month) => sum + month.expenses, 0);
+  const totalProfit = totalIncome - totalExpenses;
+
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-lg font-bold">ניתוח חודשי</CardTitle>
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleShowFromYearStart}
-              className="flex items-center gap-2"
-            >
-              <Calendar className="h-4 w-4" />
-              הצג מתחילת השנה
-            </Button>
+    <div className="container mx-auto p-2 space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <Card>
+          <CardContent className="p-3">
             <div className="flex items-center gap-2">
-              <DatePicker
-                date={startDate}
-                onDateChange={setStartDate}
-                placeholder="מתאריך"
-                className="w-[140px]"
-              />
-              <span className="text-muted-foreground">עד</span>
-              <DatePicker
-                date={endDate}
-                onDateChange={setEndDate}
-                placeholder="עד תאריך"
-                className="w-[140px]"
-              />
+              <TrendingUp className="h-4 w-4 text-green-500" />
+              <div>
+                <div className="text-xs text-muted-foreground">הכנסות</div>
+                <div className="text-sm font-bold text-green-500">
+                  {totalIncome.toLocaleString('he-IL', {
+                    style: 'currency',
+                    currency: 'ILS',
+                    minimumFractionDigits: 0
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2">
+              <TrendingDown className="h-4 w-4 text-red-500" />
+              <div>
+                <div className="text-xs text-muted-foreground">הוצאות</div>
+                <div className="text-sm font-bold text-red-500">
+                  {totalExpenses.toLocaleString('he-IL', {
+                    style: 'currency',
+                    currency: 'ILS',
+                    minimumFractionDigits: 0
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2">
+              {totalProfit >= 0 ? (
+                <ArrowUpRight className="h-4 w-4 text-green-500" />
+              ) : (
+                <ArrowDownRight className="h-4 w-4 text-red-500" />
+              )}
+              <div>
+                <div className="text-xs text-muted-foreground">רווח/הפסד</div>
+                <div className={`text-sm font-bold ${totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  {totalProfit.toLocaleString('he-IL', {
+                    style: 'currency',
+                    currency: 'ILS',
+                    minimumFractionDigits: 0
+                  })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <div className="text-xs text-muted-foreground">תקופה</div>
+                <div className="text-sm">
+                  {format(startDate, 'MMM yyyy', { locale: he })} - {format(endDate, 'MMM yyyy', { locale: he })}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="p-3">
+          <div className="flex flex-col gap-2">
+            <CardTitle className="text-base font-bold">ניתוח חודשי</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleShowFromYearStart}
+                className="flex items-center gap-1 text-xs"
+              >
+                <Calendar className="h-3 w-3" />
+                מתחילת השנה
+              </Button>
+              <div className="flex items-center gap-1">
+                <DatePicker
+                  date={startDate}
+                  onDateChange={setStartDate}
+                  placeholder="מתאריך"
+                  className="w-[100px] text-xs"
+                />
+                <span className="text-xs text-muted-foreground">עד</span>
+                <DatePicker
+                  date={endDate}
+                  onDateChange={setEndDate}
+                  placeholder="עד תאריך"
+                  className="w-[100px] text-xs"
+                />
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-[400px]">
+        <CardContent className="p-2">
+          <div className="h-[250px] sm:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                margin={{ top: 10, right: 5, left: 5, bottom: 5 }}
               >
-                <XAxis dataKey="name" />
-                <YAxis />
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 10 }}
+                  interval={0}
+                  angle={-45}
+                  textAnchor="end"
+                  height={50}
+                />
+                <YAxis 
+                  tick={{ fontSize: 10 }}
+                  tickFormatter={(value) => 
+                    (value / 1000).toLocaleString('he-IL') + 'K'
+                  }
+                  width={40}
+                />
                 <Tooltip
                   formatter={(value, name) => {
                     const formattedValue = value.toLocaleString('he-IL', {
@@ -179,13 +269,13 @@ const ChartsPage = () => {
 
       {selectedMonth && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">
+          <CardHeader className="p-3">
+            <CardTitle className="text-base font-bold">
               {getTypeLabel()} - {selectedMonth.name} {selectedMonth.year}
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+          <CardContent className="p-2">
+            <div className="space-y-1">
               {filteredTransactions.map((transaction) => {
                 const category = getCategoryById(transaction.categoryId);
                 const IconComponent = getIconComponent(category?.icon);
@@ -197,20 +287,20 @@ const ChartsPage = () => {
                     key={transaction.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center justify-between p-4 bg-card rounded-lg border"
+                    className="flex items-center justify-between p-2 bg-card rounded-lg border hover:bg-accent/50 transition-colors"
                   >
-                    <div className="flex items-center space-x-4 rtl:space-x-reverse">
-                      <div className={`p-2 rounded-full ${category?.color?.replace('text-', 'bg-')}/20`}>
-                        <IconComponent className={`h-5 w-5 ${category?.color || 'text-primary'}`} />
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-full ${category?.color?.replace('text-', 'bg-')}/20`}>
+                        <IconComponent className={`h-3.5 w-3.5 ${category?.color || 'text-primary'}`} />
                       </div>
                       <div>
-                        <div className="font-medium">{transaction.description}</div>
-                        <div className="text-sm text-muted-foreground">{category?.name_he}</div>
+                        <div className="font-medium text-xs">{transaction.description}</div>
+                        <div className="text-xs text-muted-foreground">{category?.name_he}</div>
                         {transaction.tags && transaction.tags.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
+                          <div className="mt-0.5 flex flex-wrap gap-0.5">
                             {transaction.tags.map(tag => (
-                              <span key={tag} className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded-full flex items-center">
-                                <Tag className="h-3 w-3 mr-1 rtl:ml-1 rtl:mr-0" />
+                              <span key={tag} className="px-1 py-0.5 text-[10px] bg-muted text-muted-foreground rounded-full flex items-center">
+                                <Tag className="h-2.5 w-2.5 mr-0.5 rtl:ml-0.5 rtl:mr-0" />
                                 {tag}
                               </span>
                             ))}
@@ -218,7 +308,7 @@ const ChartsPage = () => {
                         )}
                       </div>
                     </div>
-                    <div className={`font-semibold ${amountColor}`}>
+                    <div className={`font-semibold text-xs ${amountColor}`}>
                       {amountPrefix}
                       {transaction.amount.toLocaleString('he-IL', {
                         style: 'currency',
