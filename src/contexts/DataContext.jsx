@@ -8,7 +8,7 @@ import {
 
 import { db } from '../firebase';
 import {
-  collection, getDocs, setDoc, deleteDoc, doc
+  collection, getDocs, setDoc, deleteDoc, doc, getDoc, writeBatch
 } from 'firebase/firestore';
 
 const DataContext = createContext();
@@ -50,45 +50,88 @@ export const DataProvider = ({ children }) => {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [deletedTransactions, setDeletedTransactions] = useState(new Map());
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!db || !userId) return;
+      if (!db || !userId) {
+        console.error('❌ Database or userId not available:', { db: !!db, userId });
+        return;
+      }
+
       try {
-        const [transactionsSnapshot, categoriesSnapshot] = await Promise.all([
-          getDocs(collection(db, 'users', userId, 'transactions')),
-          getDocs(collection(db, 'users', userId, 'categories')),
-        ]);
-        const transactionsData = transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setTransactions(transactionsData);
-
-        const categoriesData = categoriesSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          icon: getIconComponent(doc.data().iconName),
-        }));
-
-        if (categoriesData.length === 0) {
-          const defaultWithIcons = defaultCategories.map(c => ({
-            ...c,
-            icon: getIconComponent(c.iconName),
-          }));
-          setCategories(defaultWithIcons);
-          for (const cat of defaultWithIcons) {
-            const { icon, ...categoryToSave } = cat;
-            await setDoc(doc(db, 'users', userId, 'categories', cat.id), categoryToSave);
+        console.log('🔍 Fetching transactions and categories...');
+        
+        // Get transactions
+        const transactionsSnapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
+        const loadedTransactions = transactionsSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(t => !t.deleted); // Filter out deleted transactions
+        
+        console.log('📝 Loaded transactions:', {
+          count: loadedTransactions.length,
+          ids: loadedTransactions.map(t => t.id)
+        });
+        
+        // Initialize deleted transactions state from loaded transactions
+        const deletedMap = new Map();
+        transactionsSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.deleted) {
+            const key = data.originalId || doc.id;
+            if (!deletedMap.has(key)) {
+              deletedMap.set(key, new Set());
+            }
+            deletedMap.get(key).add(data.date);
           }
+        });
+        setDeletedTransactions(deletedMap);
+        
+        setTransactions(loadedTransactions);
+
+        // Get categories
+        const categoriesSnapshot = await getDocs(collection(db, 'users', userId, 'categories'));
+        const loadedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        console.log('📝 Loaded categories:', {
+          count: loadedCategories.length,
+          ids: loadedCategories.map(c => c.id)
+        });
+
+        if (loadedCategories.length === 0) {
+          // Initialize default categories if none exist
+          const defaultCategories = [
+            { name: 'מזון', icon: '🍽️', color: '#FF6B6B' },
+            { name: 'תחבורה', icon: '🚗', color: '#4ECDC4' },
+            { name: 'בידור', icon: '🎬', color: '#FFD93D' },
+            { name: 'קניות', icon: '🛍️', color: '#95E1D3' },
+            { name: 'בריאות', icon: '💊', color: '#F38181' },
+            { name: 'חינוך', icon: '📚', color: '#6C5CE7' },
+            { name: 'תשלומים', icon: '💸', color: '#A8E6CF' },
+            { name: 'אחר', icon: '📦', color: '#FFB6B9' }
+          ];
+
+          const batch = writeBatch(db);
+          defaultCategories.forEach(category => {
+            const docRef = doc(collection(db, 'users', userId, 'categories'));
+            batch.set(docRef, category);
+          });
+          await batch.commit();
+
+          setCategories(defaultCategories.map((cat, index) => ({ ...cat, id: `default-${index}` })));
         } else {
-          setCategories(categoriesData);
+          setCategories(loadedCategories);
         }
 
+        console.log('✅ Data initialization complete');
         setInitialized(true);
       } catch (error) {
-        console.error("Error loading data from Firestore:", error);
+        console.error('❌ Error loading data from Firestore:', error);
       }
     };
+
     fetchData();
-  }, [userId]);
+  }, [db, userId]);
 
   useEffect(() => {
     if (!initialized || !transactions.length) return;
@@ -99,30 +142,25 @@ export const DataProvider = ({ children }) => {
       const endDate = new Date(today);
       endDate.setFullYear(endDate.getFullYear() + 5);
 
-      for (const t of transactions) {
+      // Get all transactions that are part of a recurring series
+      const recurringTransactions = transactions.filter(t => t.recurring || t.originalId);
+      
+      console.log('🔍 DELETED TRANSACTIONS:', 
+        Array.from(deletedTransactions.entries()).map(([key, dates]) => ({
+          key,
+          dates: Array.from(dates)
+        }))
+      );
+
+      for (const t of recurringTransactions) {
         if (!t.recurring || !t.recurrenceFrequency) continue;
 
-        console.log("🔁 Processing recurring transaction:", {
-          id: t.id,
-          date: t.date,
-          frequency: t.recurrenceFrequency,
-          endType: t.recurrenceEndType,
-          occurrences: t.recurrenceOccurrences,
-          endDate: t.recurrenceEndDate
-        });
-
         let nextDate = new Date(t.date);
-        let count = 1; // Start from 1 to include the original transaction
-        let generatedCount = 0; // Count of generated transactions
+        let count = 1;
+        let generatedCount = 0;
 
         const maxCount = t.recurrenceEndType === 'count' ? t.recurrenceOccurrences : 100;
         const endByDate = t.recurrenceEndType === 'date' && t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : endDate;
-
-        console.log("📅 Generation parameters:", {
-          maxCount,
-          endByDate: endByDate.toISOString(),
-          startDate: nextDate.toISOString()
-        });
 
         // First, advance the date to the next occurrence
         switch (t.recurrenceFrequency) {
@@ -137,36 +175,34 @@ export const DataProvider = ({ children }) => {
             break;
         }
 
-        console.log("🔄 Starting generation loop with nextDate:", nextDate.toISOString());
-
-        // Keep generating until we reach either the max count or end date
-        while (nextDate <= endByDate && count < maxCount) {
+        while (nextDate <= endByDate && count <= maxCount) {
           const instanceDate = new Date(nextDate);
           const isoDate = instanceDate.toISOString().slice(0, 10);
 
-          // Check if this instance already exists
+          // Check if this date has been deleted
+          const isDeleted = deletedTransactions.get(t.id)?.has(isoDate) || 
+                          deletedTransactions.get(t.originalId)?.has(isoDate);
+
           const alreadyExists = transactions.some(
             (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
           );
 
-          console.log(`📊 Iteration ${count}:`, {
-            date: isoDate,
-            alreadyExists,
-            isFuture: instanceDate >= today,
-            count,
-            generatedCount,
-            maxCount
-          });
-
-          if (!alreadyExists && instanceDate >= today) {
-            console.log(`✅ Creating instance on ${isoDate}`);
-            futureTransactions.push({
+          if (!alreadyExists && !isDeleted && instanceDate >= today) {
+            const newTransaction = {
               ...t,
               id: generateId(),
               originalId: t.id,
               date: isoDate,
               recurring: false,
+            };
+            console.log('➕ GENERATING NEW TRANSACTION:', {
+              id: newTransaction.id,
+              originalId: newTransaction.originalId,
+              date: newTransaction.date,
+              isDeleted,
+              alreadyExists
             });
+            futureTransactions.push(newTransaction);
             generatedCount++;
           }
 
@@ -185,26 +221,20 @@ export const DataProvider = ({ children }) => {
 
           count++;
         }
-
-        console.log(`📈 Generation complete for series ${t.id}:`, {
-          totalCount: count,
-          generatedCount,
-          maxCount,
-          reachedEndDate: nextDate > endByDate,
-          reachedMaxCount: count >= maxCount
-        });
       }
 
       if (futureTransactions.length > 0) {
-        console.log("💾 Saving future transactions:", futureTransactions);
+        console.log('📝 ADDING NEW TRANSACTIONS:', futureTransactions.map(t => ({
+          id: t.id,
+          originalId: t.originalId,
+          date: t.date
+        })));
         await addTransactions(futureTransactions);
-      } else {
-        console.log("ℹ️ No future transactions to save");
       }
     };
 
     generateFutureRecurringTransactions();
-  }, [initialized, transactions]);
+  }, [initialized, transactions, deletedTransactions]);
 
   const addTransaction = async (transaction) => {
     const id = transaction.id || generateId();
@@ -336,43 +366,79 @@ export const DataProvider = ({ children }) => {
 
   // מחיקת מופע בודד
   const deleteSingleTransaction = async (transactionId) => {
+    console.log('🔍 DELETE SINGLE TRANSACTION:', transactionId);
+    
     // Find the transaction to delete
     const transactionToDelete = transactions.find(t => t.id === transactionId);
-    if (!transactionToDelete) return;
-
-    // If it's a generated instance, just delete it
-    if (transactionToDelete.originalId) {
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
-      if (db && userId) {
-        await deleteDoc(doc(db, 'users', userId, 'transactions', transactionId));
-      }
+    if (!transactionToDelete) {
+      console.log('❌ Transaction not found:', transactionId);
       return;
     }
 
-    // If it's the original transaction, we need to handle it differently
-    if (transactionToDelete.recurring) {
-      // Delete the original transaction
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
-      if (db && userId) {
-        await deleteDoc(doc(db, 'users', userId, 'transactions', transactionId));
-      }
-    }
-  };
+    console.log('📝 TRANSACTION TO DELETE:', {
+      id: transactionToDelete.id,
+      originalId: transactionToDelete.originalId,
+      date: transactionToDelete.date,
+      recurring: transactionToDelete.recurring
+    });
 
-  // מחיקת כל הסדרה
-  const deleteEntireSeries = async (originalId) => {
-    const transactionsToDelete = transactions.filter(t => 
-      t.id === originalId || t.originalId === originalId
-    );
-    const deletePromises = transactionsToDelete.map(t =>
-      deleteDoc(doc(db, 'users', userId, 'transactions', t.id))
-    );
-    await Promise.all(deletePromises);
-    setTransactions(prev => prev.filter(t => t.id !== originalId && t.originalId !== originalId));
+    try {
+      if (!db || !userId) {
+        console.error('❌ Database or userId not available:', { db: !!db, userId });
+        throw new Error('Database or userId not available');
+      }
+
+      const docRef = doc(db, 'users', userId, 'transactions', transactionId);
+      
+      // Mark as deleted in the database
+      await setDoc(docRef, { ...transactionToDelete, deleted: true });
+      console.log('✅ MARKED AS DELETED IN DB:', {
+        id: transactionId,
+        originalId: transactionToDelete.originalId,
+        date: transactionToDelete.date
+      });
+      
+      // Update deleted transactions state
+      setDeletedTransactions(prev => {
+        const newMap = new Map(prev);
+        const key = transactionToDelete.originalId || transactionToDelete.id;
+        if (!newMap.has(key)) {
+          newMap.set(key, new Set());
+        }
+        newMap.get(key).add(transactionToDelete.date);
+        console.log('🗑️ UPDATED DELETED TRANSACTIONS:', 
+          Array.from(newMap.entries()).map(([key, dates]) => ({
+            key,
+            dates: Array.from(dates)
+          }))
+        );
+        return newMap;
+      });
+      
+      // Then update state
+      setTransactions(prev => {
+        const newTransactions = prev.filter(t => t.id !== transactionId);
+        console.log('🔄 STATE UPDATED:', {
+          beforeCount: prev.length,
+          afterCount: newTransactions.length,
+          removedId: transactionId
+        });
+        return newTransactions;
+      });
+    } catch (error) {
+      console.error('❌ Error deleting transaction:', error);
+      throw error;
+    }
   };
 
   // מחיקת החל מהמופע הנוכחי והלאה
   const deleteFromCurrentOnward = async (transaction) => {
+    console.log('🔍 DELETE FROM CURRENT ONWARD:', {
+      id: transaction.id,
+      originalId: transaction.originalId,
+      date: transaction.date
+    });
+
     const currentDate = new Date(transaction.date);
     const originalId = transaction.originalId || transaction.id;
     
@@ -380,14 +446,134 @@ export const DataProvider = ({ children }) => {
     const transactionsToDelete = transactions.filter(t => {
       const txDate = new Date(t.date);
       const isPartOfSeries = t.id === originalId || t.originalId === originalId;
-      return isPartOfSeries && txDate >= currentDate;
+      const shouldDelete = isPartOfSeries && txDate >= currentDate;
+      
+      console.log('🔍 CHECKING TRANSACTION:', {
+        id: t.id,
+        originalId: t.originalId,
+        date: t.date,
+        isPartOfSeries,
+        isAfterCurrentDate: txDate >= currentDate,
+        shouldDelete
+      });
+      
+      return shouldDelete;
     });
 
-    const deletePromises = transactionsToDelete.map(t =>
-      deleteDoc(doc(db, 'users', userId, 'transactions', t.id))
-    );
-    await Promise.all(deletePromises);
-    setTransactions(prev => prev.filter(t => !transactionsToDelete.some(td => td.id === t.id)));
+    console.log('📝 TRANSACTIONS TO DELETE:', transactionsToDelete.map(t => ({
+      id: t.id,
+      originalId: t.originalId,
+      date: t.date
+    })));
+
+    try {
+      if (!db || !userId) {
+        console.error('❌ Database or userId not available:', { db: !!db, userId });
+        throw new Error('Database or userId not available');
+      }
+
+      // Mark all transactions as deleted in the database
+      const updatePromises = transactionsToDelete.map(t => {
+        console.log('🗑️ MARKING AS DELETED IN DB:', {
+          id: t.id,
+          originalId: t.originalId,
+          date: t.date
+        });
+        return setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true });
+      });
+      await Promise.all(updatePromises);
+      
+      // Update deleted transactions state
+      setDeletedTransactions(prev => {
+        const newMap = new Map(prev);
+        transactionsToDelete.forEach(t => {
+          const key = t.originalId || t.id;
+          if (!newMap.has(key)) {
+            newMap.set(key, new Set());
+          }
+          newMap.get(key).add(t.date);
+        });
+        console.log('🗑️ UPDATED DELETED TRANSACTIONS:', 
+          Array.from(newMap.entries()).map(([key, dates]) => ({
+            key,
+            dates: Array.from(dates)
+          }))
+        );
+        return newMap;
+      });
+      
+      // Then update state
+      setTransactions(prev => {
+        const newTransactions = prev.filter(t => !transactionsToDelete.some(td => td.id === t.id));
+        console.log('🔄 STATE UPDATED:', {
+          beforeCount: prev.length,
+          afterCount: newTransactions.length,
+          removedIds: transactionsToDelete.map(t => t.id)
+        });
+        return newTransactions;
+      });
+      
+      console.log('✅ Future transactions deleted successfully');
+    } catch (error) {
+      console.error('❌ Error deleting future transactions:', error);
+      throw error;
+    }
+  };
+
+  // מחיקת כל הסדרה
+  const deleteEntireSeries = async (originalId) => {
+    console.log('🔍 deleteEntireSeries called with originalId:', originalId);
+    
+    // Find all transactions that are part of this series
+    const transactionsToDelete = transactions.filter(t => {
+      const isPartOfSeries = t.id === originalId || t.originalId === originalId;
+      console.log('🔍 Checking transaction for series:', {
+        id: t.id,
+        originalId: t.originalId,
+        isPartOfSeries
+      });
+      return isPartOfSeries;
+    });
+    
+    console.log('📝 Found transactions to delete:', transactionsToDelete.map(t => ({
+      id: t.id,
+      originalId: t.originalId,
+      date: t.date
+    })));
+
+    try {
+      if (!db || !userId) {
+        console.error('❌ Database or userId not available:', { db: !!db, userId });
+        throw new Error('Database or userId not available');
+      }
+
+      // Mark all transactions as deleted in the database
+      const updatePromises = transactionsToDelete.map(t => {
+        console.log('🗑️ Marking as deleted in database:', {
+          userId,
+          transactionId: t.id,
+          path: `users/${userId}/transactions/${t.id}`
+        });
+        return setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true });
+      });
+      await Promise.all(updatePromises);
+      
+      // Then update state
+      setTransactions(prev => {
+        const newTransactions = prev.filter(t => !transactionsToDelete.some(td => td.id === t.id));
+        console.log('🔄 State updated:', {
+          beforeCount: prev.length,
+          afterCount: newTransactions.length,
+          removedIds: transactionsToDelete.map(t => t.id)
+        });
+        return newTransactions;
+      });
+      
+      console.log('✅ Series deleted successfully');
+    } catch (error) {
+      console.error('❌ Error deleting series:', error);
+      throw error;
+    }
   };
 
   // עריכת מופע בודד
