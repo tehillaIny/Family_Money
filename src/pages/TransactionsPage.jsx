@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import MonthNavigator from '@/components/shared/MonthNavigator.jsx';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';
-import { PlusCircle, Edit3, Trash2, TrendingUp, TrendingDown, DollarSign, Tag, Repeat } from 'lucide-react';
+import { PlusCircle, Edit3, Trash2, TrendingUp, TrendingDown, DollarSign, Tag, Repeat, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useData } from '@/hooks/useData.jsx';
 import Header from '@/components/shared/Header.jsx';
@@ -37,12 +37,17 @@ const TransactionsPage = () => {
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [dialogAction, setDialogAction] = useState('delete');
+  const [selectedTag, setSelectedTag] = useState(null);
   
   const filterCategoryId = location.state?.filterCategoryId;
   let transactions = getTransactionsForMonth();
 
   if (filterCategoryId) {
     transactions = transactions.filter(t => t.categoryId === filterCategoryId);
+  }
+
+  if (selectedTag) {
+    transactions = transactions.filter(t => t.tags?.includes(selectedTag));
   }
   
   const handleEdit = (transaction) => {
@@ -114,6 +119,22 @@ const TransactionsPage = () => {
           </Button>
         </div>
 
+        {/* Tag filter */}
+        {selectedTag && (
+          <div className="mb-4 flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">מסנן לפי תגית:</span>
+            <span className="px-2 py-1 text-xs bg-primary/20 text-primary rounded-full flex items-center gap-1">
+              {selectedTag}
+              <button
+                onClick={() => setSelectedTag(null)}
+                className="hover:text-primary/80"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          </div>
+        )}
+
         {transactions.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="px-1">
             <Card className="clean-card">
@@ -131,7 +152,9 @@ const TransactionsPage = () => {
               const categoryInfo = getCategoryById(transaction.categoryId);
               const IconComponent = transaction.type === 'income' 
                 ? TrendingUp 
-                : (categoryInfo ? getIconComponent(categoryInfo.iconName) : DollarSign);
+                : transaction.type === 'expense' 
+                  ? TrendingDown 
+                  : DollarSign;
               const categoryName = categoryInfo ? categoryInfo.name_he : 'לא מסווג';
               const categoryColor = categoryInfo ? categoryInfo.color : 'text-gray-500';
 
@@ -161,10 +184,14 @@ const TransactionsPage = () => {
                             {transaction.tags && transaction.tags.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {transaction.tags.map(tag => (
-                                  <span key={tag} className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded-full flex items-center">
+                                  <button
+                                    key={tag}
+                                    onClick={() => setSelectedTag(tag)}
+                                    className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded-full flex items-center hover:bg-primary/20 hover:text-primary transition-colors"
+                                  >
                                     <Tag className="h-3 w-3 mr-1 rtl:ml-1 rtl:mr-0" />
                                     {tag}
-                                  </span>
+                                  </button>
                                 ))}
                               </div>
                             )}

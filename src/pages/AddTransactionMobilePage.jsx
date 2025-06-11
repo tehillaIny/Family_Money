@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select.jsx';
 import { format, subDays } from 'date-fns';
 import { he } from 'date-fns/locale';
+import TagSelector from '@/components/shared/TagSelector';
 
 const NumpadButton = ({ value, onClick, className = '', isLarge = false }) => (
   <Button
@@ -60,9 +61,9 @@ const AddTransactionMobilePage = () => {
   const [isRecurring, setIsRecurring] = useState(transactionToEdit?.recurring || false);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState(transactionToEdit?.recurrenceFrequency || 'monthly');
   const [recurrenceDay, setRecurrenceDay] = useState(transactionToEdit?.recurrenceDay || selectedDate.getDate());
-  const [recurrenceEndType, setRecurrenceEndType] = useState(transactionToEdit?.recurrenceEndType || 'never');
+  const [recurrenceEndType, setRecurrenceEndType] = useState(transactionToEdit?.recurrenceEndType || 'count');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(transactionToEdit?.recurrenceEndDate ? new Date(transactionToEdit.recurrenceEndDate) : new Date());
-  const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(transactionToEdit?.recurrenceOccurrences || 1);
+  const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(transactionToEdit?.recurrenceOccurrences || 12);
 
   useEffect(() => {
     if (!transactionToEdit && preselectedCategoryId) {
@@ -237,13 +238,13 @@ const AddTransactionMobilePage = () => {
 
         {/* תגיות */}
         <div className="relative">
-          <Tags className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            value={tagsStr}
-            onChange={(e) => setTagsStr(e.target.value)}
-            placeholder="תגיות (מופרדות בפסיק, אופציונלי)"
-            className="h-12 pl-10"
-          />
+          <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="pl-10">
+            <TagSelector
+              value={tagsStr}
+              onChange={setTagsStr}
+            />
+          </div>
         </div>
 
         {/* תזמון חוזר */}
