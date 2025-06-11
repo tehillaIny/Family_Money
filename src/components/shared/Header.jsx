@@ -3,6 +3,7 @@
     import { NavLink } from 'react-router-dom';
     import { Wallet } from 'lucide-react';
     import { motion } from 'framer-motion';
+    import { AnnualBalance } from '@/components/shared/AnnualBalance.jsx';
 
     const Header = () => {
       return (
@@ -19,6 +20,7 @@
             </NavLink>
             {/* Navigation items moved to BottomNavBar */}
           </nav>
+          <AnnualBalance />
         </motion.header>
       );
     };
