@@ -136,10 +136,10 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     if (!initialized || !transactions.length) return;
 
-    const generateFutureRecurringTransactions = async () => {
-      const futureTransactions = [];
-      const today = new Date();
-      const endDate = new Date(today);
+   const generateFutureRecurringTransactions = async () => {
+  const futureTransactions = [];
+  const today = new Date();
+  const endDate = new Date(today);
       endDate.setFullYear(endDate.getFullYear() + 5);
 
       // Get all transactions that are part of a recurring series
@@ -153,14 +153,14 @@ export const DataProvider = ({ children }) => {
       );
 
       for (const t of recurringTransactions) {
-        if (!t.recurring || !t.recurrenceFrequency) continue;
+    if (!t.recurring || !t.recurrenceFrequency) continue;
 
-        let nextDate = new Date(t.date);
+    let nextDate = new Date(t.date);
         let count = 1;
         let generatedCount = 0;
 
-        const maxCount = t.recurrenceEndType === 'count' ? t.recurrenceOccurrences : 100;
-        const endByDate = t.recurrenceEndType === 'date' && t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : endDate;
+    const maxCount = t.recurrenceEndType === 'count' ? t.recurrenceOccurrences : 100;
+    const endByDate = t.recurrenceEndType === 'date' && t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : endDate;
 
         // First, advance the date to the next occurrence
         switch (t.recurrenceFrequency) {
@@ -176,23 +176,23 @@ export const DataProvider = ({ children }) => {
         }
 
         while (nextDate <= endByDate && count <= maxCount) {
-          const instanceDate = new Date(nextDate);
-          const isoDate = instanceDate.toISOString().slice(0, 10);
+      const instanceDate = new Date(nextDate);
+      const isoDate = instanceDate.toISOString().slice(0, 10);
 
           // Check if this date has been deleted
           const isDeleted = deletedTransactions.get(t.id)?.has(isoDate) || 
                           deletedTransactions.get(t.originalId)?.has(isoDate);
 
-          const alreadyExists = transactions.some(
+      const alreadyExists = transactions.some(
             (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
-          );
+      );
 
           if (!alreadyExists && !isDeleted && instanceDate >= today) {
             const newTransaction = {
-              ...t,
-              id: generateId(),
-              originalId: t.id,
-              date: isoDate,
+          ...t,
+          id: generateId(),
+          originalId: t.id,
+          date: isoDate,
               recurring: false,
             };
             console.log('➕ GENERATING NEW TRANSACTION:', {
@@ -207,31 +207,31 @@ export const DataProvider = ({ children }) => {
           }
 
           // Advance to next occurrence
-          switch (t.recurrenceFrequency) {
-            case 'monthly':
-              nextDate.setMonth(nextDate.getMonth() + 1);
-              break;
-            case 'weekly':
-              nextDate.setDate(nextDate.getDate() + 7);
-              break;
-            case 'daily':
-              nextDate.setDate(nextDate.getDate() + 1);
-              break;
-          }
-
-          count++;
-        }
+      switch (t.recurrenceFrequency) {
+        case 'monthly':
+          nextDate.setMonth(nextDate.getMonth() + 1);
+          break;
+        case 'weekly':
+          nextDate.setDate(nextDate.getDate() + 7);
+          break;
+        case 'daily':
+          nextDate.setDate(nextDate.getDate() + 1);
+          break;
       }
 
-      if (futureTransactions.length > 0) {
+      count++;
+    }
+  }
+
+  if (futureTransactions.length > 0) {
         console.log('📝 ADDING NEW TRANSACTIONS:', futureTransactions.map(t => ({
           id: t.id,
           originalId: t.originalId,
           date: t.date
         })));
-        await addTransactions(futureTransactions);
-      }
-    };
+    await addTransactions(futureTransactions);
+  }
+};
 
     generateFutureRecurringTransactions();
   }, [initialized, transactions, deletedTransactions]);
@@ -365,7 +365,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // מחיקת מופע בודד
-  const deleteSingleTransaction = async (transactionId) => {
+const deleteSingleTransaction = async (transactionId) => {
     console.log('🔍 DELETE SINGLE TRANSACTION:', transactionId);
     
     // Find the transaction to delete
@@ -517,11 +517,11 @@ export const DataProvider = ({ children }) => {
     } catch (error) {
       console.error('❌ Error deleting future transactions:', error);
       throw error;
-    }
-  };
+  }
+};
 
-  // מחיקת כל הסדרה
-  const deleteEntireSeries = async (originalId) => {
+// מחיקת כל הסדרה
+const deleteEntireSeries = async (originalId) => {
     console.log('🔍 deleteEntireSeries called with originalId:', originalId);
     
     // Find all transactions that are part of this series
@@ -574,45 +574,45 @@ export const DataProvider = ({ children }) => {
       console.error('❌ Error deleting series:', error);
       throw error;
     }
-  };
+};
 
-  // עריכת מופע בודד
-  const editSingleTransaction = async (updatedTransaction) => {
-    setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? updatedTransaction : t)));
-    if (db && userId) {
-      await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), updatedTransaction);
-    }
-  };
+// עריכת מופע בודד
+const editSingleTransaction = async (updatedTransaction) => {
+  setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? updatedTransaction : t)));
+  if (db && userId) {
+    await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), updatedTransaction);
+  }
+};
 
-  // עריכת כל הסדרה
-  const editEntireSeries = async (originalId, updates) => {
-    const transactionsToUpdate = transactions.filter(t => t.id === originalId || t.originalId === originalId);
-    const updatePromises = transactionsToUpdate.map(t => {
-      const updated = { ...t, ...updates };
-      return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
-    });
-    await Promise.all(updatePromises);
-    setTransactions(prev => prev.map(t =>
-      t.id === originalId || t.originalId === originalId ? { ...t, ...updates } : t
-    ));
-  };
+// עריכת כל הסדרה
+const editEntireSeries = async (originalId, updates) => {
+  const transactionsToUpdate = transactions.filter(t => t.id === originalId || t.originalId === originalId);
+  const updatePromises = transactionsToUpdate.map(t => {
+    const updated = { ...t, ...updates };
+    return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
+  });
+  await Promise.all(updatePromises);
+  setTransactions(prev => prev.map(t =>
+    t.id === originalId || t.originalId === originalId ? { ...t, ...updates } : t
+  ));
+};
 
-  // עריכת החל מהמופע הנוכחי והלאה
-  const editFromCurrentOnward = async (transaction, updates) => {
-    const currentDate = new Date(transaction.date);
-    const transactionsToUpdate = transactions.filter(t =>
-      (t.originalId === transaction.originalId || t.id === transaction.originalId) &&
-      new Date(t.date) >= currentDate
-    );
-    const updatePromises = transactionsToUpdate.map(t => {
-      const updated = { ...t, ...updates };
-      return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
-    });
-    await Promise.all(updatePromises);
-    setTransactions(prev => prev.map(t =>
-      transactionsToUpdate.some(tu => tu.id === t.id) ? { ...t, ...updates } : t
-    ));
-  };
+// עריכת החל מהמופע הנוכחי והלאה
+const editFromCurrentOnward = async (transaction, updates) => {
+  const currentDate = new Date(transaction.date);
+  const transactionsToUpdate = transactions.filter(t =>
+    (t.originalId === transaction.originalId || t.id === transaction.originalId) &&
+    new Date(t.date) >= currentDate
+  );
+  const updatePromises = transactionsToUpdate.map(t => {
+    const updated = { ...t, ...updates };
+    return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
+  });
+  await Promise.all(updatePromises);
+  setTransactions(prev => prev.map(t =>
+    transactionsToUpdate.some(tu => tu.id === t.id) ? { ...t, ...updates } : t
+  ));
+};
 
   return (
     <DataContext.Provider value={{
