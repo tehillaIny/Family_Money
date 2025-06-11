@@ -9,7 +9,6 @@
     import ReviewPage from '@/pages/ReviewPage.jsx';
     import AddTransactionMobilePage from '@/pages/AddTransactionMobilePage.jsx';
     import SettingsPage from '@/pages/SettingsPage.jsx';
-//try
 
     function App() {
       return (

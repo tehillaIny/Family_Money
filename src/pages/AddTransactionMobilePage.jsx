@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, CheckCircle, Tag, Type, X, DollarSign, Tags } from 'lucide-react';
+import {
+  ArrowLeft, CalendarDays, CheckCircle, Tag, Type, X,
+  DollarSign, Tags, Repeat, CalendarCheck2, Hash
+} from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { useData } from '@/hooks/useData.jsx';
 import { useToast } from '@/components/ui/use-toast.js';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover.jsx';
 import { Calendar } from '@/components/ui/calendar.jsx';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup } from '@/components/ui/select.jsx';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger,
+  SelectValue, SelectGroup
+} from '@/components/ui/select.jsx';
 import { format, subDays } from 'date-fns';
 import { he } from 'date-fns/locale';
 
@@ -25,10 +31,21 @@ const NumpadButton = ({ value, onClick, className = '', isLarge = false }) => (
 const AddTransactionMobilePage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { categories, addTransaction, updateTransaction, getCategoryById, currentDate: contextCurrentDate, getIconComponent } = useData();
+  const {
+    categories,
+    addTransaction,
+    updateTransaction,
+    editSingleTransaction,
+    editEntireSeries,
+    editFromCurrentOnward,
+    getCategoryById,
+    currentDate: contextCurrentDate,
+    getIconComponent
+  } = useData();
   const { toast } = useToast();
 
   const transactionToEdit = location.state?.transactionToEdit;
+  const editMode = location.state?.editMode;
   const preselectedCategoryId = location.state?.preselectedCategoryId;
   const preselectedType = location.state?.type;
   const currentMonthDateFromNav = location.state?.currentMonthDate ? new Date(location.state.currentMonthDate) : new Date(contextCurrentDate);
@@ -38,22 +55,22 @@ const AddTransactionMobilePage = () => {
   const [selectedDate, setSelectedDate] = useState(transactionToEdit ? new Date(transactionToEdit.date) : currentMonthDateFromNav);
   const [type, setType] = useState(transactionToEdit ? transactionToEdit.type : preselectedType || 'expense');
   const [selectedCategoryId, setSelectedCategoryId] = useState(transactionToEdit ? transactionToEdit.categoryId : preselectedCategoryId || '');
-  const [tagsStr, setTagsStr] = useState(transactionToEdit && transactionToEdit.tags ? transactionToEdit.tags.join(', ') : '');
+  const [tagsStr, setTagsStr] = useState(transactionToEdit?.tags?.join(', ') || '');
+
+  const [isRecurring, setIsRecurring] = useState(transactionToEdit?.recurring || false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState(transactionToEdit?.recurrenceFrequency || 'monthly');
+  const [recurrenceDay, setRecurrenceDay] = useState(transactionToEdit?.recurrenceDay || selectedDate.getDate());
+  const [recurrenceEndType, setRecurrenceEndType] = useState(transactionToEdit?.recurrenceEndType || 'never');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(transactionToEdit?.recurrenceEndDate ? new Date(transactionToEdit.recurrenceEndDate) : new Date());
+  const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(transactionToEdit?.recurrenceOccurrences || 1);
 
   useEffect(() => {
-    if (!transactionToEdit) {
-      if (preselectedCategoryId) {
-        setSelectedCategoryId(preselectedCategoryId);
-        const cat = getCategoryById(preselectedCategoryId);
-        if (cat?.type) {
-          setType(cat.type);
-        }
-      } else if (preselectedType) {
-        setType(preselectedType);
-        setSelectedCategoryId('');
-      }
+    if (!transactionToEdit && preselectedCategoryId) {
+      setSelectedCategoryId(preselectedCategoryId);
+      const cat = getCategoryById(preselectedCategoryId);
+      if (cat?.type) setType(cat.type);
     }
-  }, [preselectedCategoryId, preselectedType, getCategoryById, transactionToEdit]);
+  }, [preselectedCategoryId, transactionToEdit, getCategoryById]);
 
   const handleNumpadInput = (value) => {
     if (value === '.' && amountStr.includes('.')) return;
@@ -66,12 +83,6 @@ const AddTransactionMobilePage = () => {
     }
   };
 
-  const handleBackspace = () => {
-    setAmountStr(prev => prev.length > 1 ? prev.slice(0, -1) : '0');
-  };
-
-  const handleClear = () => setAmountStr('0');
-
   const handleSubmit = () => {
     const finalAmount = parseFloat(amountStr);
     if (isNaN(finalAmount) || finalAmount <= 0) {
@@ -83,25 +94,47 @@ const AddTransactionMobilePage = () => {
       return;
     }
 
-    const tagsArray = tagsStr.split(',').map(tag => tag.trim()).filter(tag => tag !== '');
-
+    const tagsArray = tagsStr.split(',').map(tag => tag.trim()).filter(Boolean);
     const transactionData = {
-      id: transactionToEdit ? transactionToEdit.id : undefined,
+      id: transactionToEdit?.id,
       type,
       amount: finalAmount,
       categoryId: selectedCategoryId,
       date: selectedDate.toISOString().split('T')[0],
       description,
       tags: tagsArray,
+      recurring: isRecurring,
+      recurrenceFrequency,
+      recurrenceDay,
+      recurrenceEndType,
+      recurrenceEndDate: recurrenceEndType === 'date' ? recurrenceEndDate.toISOString().split('T')[0] : null,
+      recurrenceOccurrences: recurrenceEndType === 'count' ? recurrenceOccurrences : null,
     };
 
     if (transactionToEdit) {
-      updateTransaction(transactionData);
+      if (editMode) {
+        switch (editMode) {
+          case 'single':
+            editSingleTransaction(transactionData);
+            break;
+          case 'future':
+            editFromCurrentOnward(transactionToEdit, transactionData);
+            break;
+          case 'all':
+            editEntireSeries(transactionToEdit.originalId || transactionToEdit.id, transactionData);
+            break;
+          default:
+            updateTransaction(transactionData);
+        }
+      } else {
+        updateTransaction(transactionData);
+      }
       toast({ title: "הצלחה!", description: "העסקה עודכנה." });
     } else {
       addTransaction(transactionData);
       toast({ title: "הצלחה!", description: "העסקה נוספה." });
     }
+
     navigate(-1);
   };
 
@@ -109,7 +142,8 @@ const AddTransactionMobilePage = () => {
   const currentCategoryName = getCategoryById(selectedCategoryId)?.name_he || (type === 'income' ? 'בחר קטגורית הכנסה' : 'בחר קטגורית הוצאה');
 
   return (
-    <div className="fixed inset-0 bg-background flex flex-col p-4 sm:p-6 h-screen" dir="rtl">
+    <div className="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-background" dir="rtl">
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-6 w-6" />
@@ -120,50 +154,57 @@ const AddTransactionMobilePage = () => {
         </Button>
       </div>
 
-      <div className="mb-4 p-4 bg-muted rounded-lg text-center">
-        <span className={`text-4xl font-bold ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
-          {parseFloat(amountStr).toLocaleString('he-IL', { style: 'currency', currency: 'ILS', minimumFractionDigits: amountStr.includes('.') ? amountStr.split('.')[1].length : 0})}
-        </span>
-      </div>
+      {/* Scrollable Form Content */}
+      <div className="overflow-y-auto flex-grow space-y-4 pb-4">
+        <div className="p-4 bg-muted rounded-lg text-center">
+          <span className={`text-4xl font-bold ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+            {parseFloat(amountStr).toLocaleString('he-IL', {
+              style: 'currency',
+              currency: 'ILS',
+              minimumFractionDigits: amountStr.includes('.') ? amountStr.split('.')[1].length : 0
+            })}
+          </span>
+        </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="w-full justify-start text-left font-normal h-12">
-              <CalendarDays className="ml-2 h-5 w-5 opacity-70" />
-              {selectedDate ? format(selectedDate, 'PPP', { locale: he }) : <span>בחר תאריך</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
-              initialFocus
-              locale={he}
-              dir="rtl"
-            />
-            <div className="p-2 border-t border-border grid grid-cols-3 gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>היום</Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate(subDays(new Date(), 1))}>אתמול</Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDate(currentMonthDateFromNav)}>חודש נוכחי</Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        {/* Date & Type */}
+        <div className="grid grid-cols-2 gap-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start text-left font-normal h-12">
+                <CalendarDays className="ml-2 h-5 w-5 opacity-70" />
+                {selectedDate ? format(selectedDate, 'PPP', { locale: he }) : 'בחר תאריך'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={setSelectedDate}
+                initialFocus
+                locale={he}
+                dir="rtl"
+              />
+              <div className="p-2 border-t border-border grid grid-cols-3 gap-1">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>היום</Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(subDays(new Date(), 1))}>אתמול</Button>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedDate(currentMonthDateFromNav)}>חודש נוכחי</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
 
-        <Select value={type} onValueChange={(newType) => { setType(newType); setSelectedCategoryId(''); }}>
-          <SelectTrigger className="h-12">
-            <Type className="ml-2 h-5 w-5 opacity-70" />
-            <SelectValue placeholder="סוג עסקה" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="expense">הוצאה</SelectItem>
-            <SelectItem value="income">הכנסה</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+          <Select value={type} onValueChange={(newType) => { setType(newType); setSelectedCategoryId(''); }}>
+            <SelectTrigger className="h-12">
+              <Type className="ml-2 h-5 w-5 opacity-70" />
+              <SelectValue placeholder="סוג עסקה" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="expense">הוצאה</SelectItem>
+              <SelectItem value="income">הכנסה</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-      <div className="mb-4">
+        {/* קטגוריה */}
         <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
           <SelectTrigger className="h-12 w-full">
             <Tag className="ml-2 h-5 w-5 opacity-70" />
@@ -172,11 +213,11 @@ const AddTransactionMobilePage = () => {
           <SelectContent>
             <SelectGroup>
               {filteredCategories.map((cat) => {
-                const IconComponent = getIconComponent(cat.iconName) || DollarSign;
+                const Icon = getIconComponent(cat.iconName) || DollarSign;
                 return (
                   <SelectItem key={cat.id} value={cat.id}>
                     <div className="flex items-center">
-                      <IconComponent className={`ml-2 h-4 w-4 ${cat.color || 'text-gray-400'}`} />
+                      <Icon className={`ml-2 h-4 w-4 ${cat.color || 'text-gray-400'}`} />
                       {cat.name_he}
                     </div>
                   </SelectItem>
@@ -185,53 +226,116 @@ const AddTransactionMobilePage = () => {
             </SelectGroup>
           </SelectContent>
         </Select>
-      </div>
 
-      <div className="mb-4">
-        <Input 
-          type="text" 
-          value={description} 
-          onChange={(e) => setDescription(e.target.value)} 
+        {/* תיאור */}
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           placeholder="תיאור (אופציונלי)"
           className="h-12"
         />
-      </div>
 
-      <div className="mb-4">
+        {/* תגיות */}
         <div className="relative">
           <Tags className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input 
-            type="text" 
-            value={tagsStr} 
-            onChange={(e) => setTagsStr(e.target.value)} 
+          <Input
+            value={tagsStr}
+            onChange={(e) => setTagsStr(e.target.value)}
             placeholder="תגיות (מופרדות בפסיק, אופציונלי)"
             className="h-12 pl-10"
           />
         </div>
-      </div>
 
-      <div className="grid grid-cols-4 gap-2 flex-grow content-end">
-        <NumpadButton value="C" onClick={handleClear} className="text-red-500" />
-        <NumpadButton value="7" onClick={handleNumpadInput} />
-        <NumpadButton value="8" onClick={handleNumpadInput} />
-        <NumpadButton value="9" onClick={handleNumpadInput} />
+        {/* תזמון חוזר */}
+        <div className="space-y-2">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={isRecurring} onChange={() => setIsRecurring(!isRecurring)} />
+            <Repeat className="h-5 w-5" /> עסקה מתוזמנת
+          </label>
 
-        <NumpadButton value="." onClick={handleNumpadInput} />
-        <NumpadButton value="4" onClick={handleNumpadInput} />
-        <NumpadButton value="5" onClick={handleNumpadInput} />
-        <NumpadButton value="6" onClick={handleNumpadInput} />
+          {isRecurring && (
+            <>
+              <Select value={recurrenceFrequency} onValueChange={setRecurrenceFrequency}>
+                <SelectTrigger className="h-12 w-full">
+                  <CalendarCheck2 className="ml-2 h-5 w-5 opacity-70" />
+                  <SelectValue placeholder="תדירות" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">יומית</SelectItem>
+                  <SelectItem value="weekly">שבועית</SelectItem>
+                  <SelectItem value="monthly">חודשית</SelectItem>
+                </SelectContent>
+              </Select>
 
-        <NumpadButton value="0" onClick={handleNumpadInput} />
-        <NumpadButton value="1" onClick={handleNumpadInput} />
-        <NumpadButton value="2" onClick={handleNumpadInput} />
-        <NumpadButton value="3" onClick={handleNumpadInput} />
+              <Input
+                type="number"
+                className="h-12"
+                placeholder="יום בחודש"
+                value={recurrenceDay}
+                onChange={(e) => setRecurrenceDay(Number(e.target.value))}
+              />
 
-        <Button type="button" variant="outline" className="text-2xl h-16 sm:h-20 rounded-lg col-span-2" onClick={handleBackspace}>
-          <X className="h-7 w-7" />
-        </Button>
-        <Button type="button" onClick={handleSubmit} className="bg-primary text-primary-foreground text-xl h-16 sm:h-20 rounded-lg col-span-2">
-          שמור
-        </Button>
+              <Select value={recurrenceEndType} onValueChange={setRecurrenceEndType}>
+                <SelectTrigger className="h-12 w-full">
+                  <SelectValue placeholder="מתי להפסיק" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="never">לא להפסיק</SelectItem>
+                  <SelectItem value="date">בתאריך מסוים</SelectItem>
+                  <SelectItem value="count">אחרי מספר פעמים</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {recurrenceEndType === 'date' && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-start text-left h-12">
+                      <CalendarDays className="ml-2 h-5 w-5 opacity-70" />
+                      {format(recurrenceEndDate, 'PPP', { locale: he })}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={recurrenceEndDate}
+                      onSelect={setRecurrenceEndDate}
+                      initialFocus
+                      locale={he}
+                      dir="rtl"
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+
+              {recurrenceEndType === 'count' && (
+                <Input
+                  type="number"
+                  className="h-12"
+                  placeholder="מספר מופעים"
+                  value={recurrenceOccurrences}
+                  onChange={(e) => setRecurrenceOccurrences(Number(e.target.value))}
+                  min={1}
+                />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* מקלדת מספרים */}
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+            <NumpadButton key={num} value={String(num)} onClick={handleNumpadInput} />
+          ))}
+          <NumpadButton value="." onClick={handleNumpadInput} />
+          <NumpadButton value="0" onClick={handleNumpadInput} />
+          <Button
+            variant="outline"
+            className="text-2xl h-16 sm:h-20 rounded-lg shadow-sm active:bg-primary/20"
+            onClick={() => setAmountStr(amountStr.length > 1 ? amountStr.slice(0, -1) : '0')}
+          >
+            <X />
+          </Button>
+        </div>
       </div>
     </div>
   );
