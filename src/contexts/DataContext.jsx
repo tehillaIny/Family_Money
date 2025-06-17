@@ -100,17 +100,6 @@ export const DataProvider = ({ children }) => {
 
         if (loadedCategories.length === 0) {
           // Initialize default categories if none exist
-          const defaultCategories = [
-            { name: 'מזון', icon: '🍽️', color: '#FF6B6B' },
-            { name: 'תחבורה', icon: '🚗', color: '#4ECDC4' },
-            { name: 'בידור', icon: '🎬', color: '#FFD93D' },
-            { name: 'קניות', icon: '🛍️', color: '#95E1D3' },
-            { name: 'בריאות', icon: '💊', color: '#F38181' },
-            { name: 'חינוך', icon: '📚', color: '#6C5CE7' },
-            { name: 'תשלומים', icon: '💸', color: '#A8E6CF' },
-            { name: 'אחר', icon: '📦', color: '#FFB6B9' }
-          ];
-
           const batch = writeBatch(db);
           defaultCategories.forEach(category => {
             const docRef = doc(collection(db, 'users', userId, 'categories'));
@@ -118,7 +107,7 @@ export const DataProvider = ({ children }) => {
           });
           await batch.commit();
 
-          setCategories(defaultCategories.map((cat, index) => ({ ...cat, id: `default-${index}` })));
+          setCategories(defaultCategories);
         } else {
           setCategories(loadedCategories);
         }

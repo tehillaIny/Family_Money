@@ -8,6 +8,16 @@ const CsvImport = () => {
   const { addTransactions, categories } = useData();
   const { toast } = useToast();
 
+  function parseDate(dateStr) {
+    if (!dateStr) return null;
+    // Handle DD/MM/YYYY format
+    const [day, month, year] = dateStr.split('/').map(num => parseInt(num, 10));
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    // Use UTC to prevent timezone issues
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.toISOString().split('T')[0];
+  }
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -20,13 +30,14 @@ const CsvImport = () => {
 
         results.data.forEach((row, index) => {
           const translatedType = translateType(row.type);
+          const parsedDate = parseDate(row.date);
 
           const transactionData = {
             id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
             type: translatedType,
             amount: parseFloat(row.amount),
             categoryId: findCategoryId(row.category, translatedType),
-            date: row.date,
+            date: parsedDate,
             description: row.notes || "",
             tags: row.tags ? row.tags.split(",").map(tag => tag.trim()) : [],
           };

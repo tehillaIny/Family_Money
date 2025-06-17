@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.jsx"
+import { formatDate } from '@/lib/utils.js';
 
 const TransactionsPage = () => {
   const navigate = useNavigate();
@@ -180,7 +181,7 @@ const TransactionsPage = () => {
                             )}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            <span>{new Date(transaction.date).toLocaleDateString('he-IL')} - {categoryName}</span>
+                            <span>{formatDate(transaction.date)} - {categoryName}</span>
                             {transaction.tags && transaction.tags.length > 0 && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {transaction.tags.map(tag => (
