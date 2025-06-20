@@ -10,10 +10,16 @@ export function AnnualBalance() {
   const annualData = useMemo(() => {
     const yearStart = startOfYear(now);
     const yearEnd = endOfYear(now);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     const yearTransactions = transactions.filter(t => {
       const transactionDate = new Date(t.date);
-      return transactionDate >= yearStart && transactionDate <= yearEnd;
+      return (
+        transactionDate >= yearStart &&
+        transactionDate <= yearEnd &&
+        transactionDate <= today
+      );
     });
 
     const income = yearTransactions

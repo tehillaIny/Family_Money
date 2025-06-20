@@ -29,7 +29,7 @@ const DashboardPage = () => {
       };
     });
 
-  const total = income + Math.abs(expenses);
+  const total = income; + Math.abs(expenses);
   const hasData = income > 0 || Math.abs(expenses) > 0;
 
   const containerVariants = {
@@ -69,10 +69,10 @@ const DashboardPage = () => {
             <PieChart>
               <Pie
                 data={
-                  hasData
+                  income > 0
                     ? [
-                        { name: 'הכנסות', value: income },
                         { name: 'הוצאות', value: Math.abs(expenses) },
+                        { name: 'נותר', value: Math.max(income - Math.abs(expenses), 0) },
                       ]
                     : [{ name: 'ריק', value: 1 }]
                 }
@@ -81,24 +81,24 @@ const DashboardPage = () => {
                 cy="50%"
                 innerRadius="60%"
                 outerRadius="80%"
-                paddingAngle={hasData ? 2 : 0}
+                paddingAngle={income > 0 ? 2 : 0}
                 isAnimationActive
               >
-                {hasData ? (
+                {income > 0 ? (
                   <>
-                    <Cell fill="hsl(var(--chart-green))" />
                     <Cell fill="hsl(var(--chart-red))" />
+                    <Cell fill="hsl(var(--chart-green))" />
                   </>
                 ) : (
                   <Cell fill="#ccc" />
                 )}
               </Pie>
-              {hasData && (
+              {income > 0 && (
                 <Tooltip
                   contentStyle={{ fontSize: '0.75rem', borderRadius: '0.5rem' }}
                   formatter={(value, name) => [
-                    `${((value / (total || 1)) * 100).toFixed(1)}%`,
-                    name === 'הכנסות' ? 'הכנסות' : 'הוצאות',
+                    `${((value / income) * 100).toFixed(1)}%`,
+                    name === 'הוצאות' ? 'הוצאות' : 'נותר',
                   ]}
                 />
               )}

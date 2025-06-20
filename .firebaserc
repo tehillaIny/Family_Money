@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "family-money-a4d5a"
-  }
+    "default": "family-money-a4d5a",
+    "family-money": "family-money-a4d5a"
+  },
+  "targets": {},
+  "etags": {}
 }

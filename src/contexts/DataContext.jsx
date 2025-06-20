@@ -299,10 +299,13 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const getTransactionsForMonth = (date = currentDate) => {
+  const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return transactions
       .filter(t => {
         const transactionDate = new Date(t.date);
+        if (excludeFuture && transactionDate > today) return false;
         return transactionDate.getFullYear() === date.getFullYear() &&
                transactionDate.getMonth() === date.getMonth();
       })
@@ -310,7 +313,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const getBalanceForMonth = (date = currentDate) => {
-    const monthTransactions = getTransactionsForMonth(date);
+    const monthTransactions = getTransactionsForMonth(date, { excludeFuture: true });
     const income = monthTransactions
       .filter(t => t.type === 'income')
       .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
@@ -321,7 +324,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const getCategorySummariesForMonth = (date = currentDate, type = 'expense') => {
-    const monthTransactions = getTransactionsForMonth(date).filter(t => t.type === type);
+    const monthTransactions = getTransactionsForMonth(date, { excludeFuture: true }).filter(t => t.type === type);
     const summaries = {};
     monthTransactions.forEach(transaction => {
       if (!summaries[transaction.categoryId]) {
