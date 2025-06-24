@@ -578,10 +578,38 @@ const editSingleTransaction = async (updatedTransaction) => {
 
 // עריכת כל הסדרה
 const editEntireSeries = async (originalId, updates) => {
+  // 1. Delete all future transactions for the series (from today onward)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const transactionsToDelete = transactions.filter(t => {
+    const txDate = new Date(t.date);
+    return (t.originalId === originalId || t.id === originalId) && txDate >= today && !t.recurring;
+  });
+  // Mark as deleted in the database
+  if (db && userId) {
+    const updatePromises = transactionsToDelete.map(t =>
+      setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true })
+    );
+    await Promise.all(updatePromises);
+  }
+  // Update deleted transactions state
+  setDeletedTransactions(prev => {
+    const newMap = new Map(prev);
+    transactionsToDelete.forEach(t => {
+      const key = t.originalId || t.id;
+      if (!newMap.has(key)) newMap.set(key, new Set());
+      newMap.get(key).add(t.date);
+    });
+    return newMap;
+  });
+  // Remove from state
+  setTransactions(prev => prev.filter(t => !transactionsToDelete.some(td => td.id === t.id)));
+
+  // 2. Update all transactions in the series (template and past)
   const transactionsToUpdate = transactions.filter(t => t.id === originalId || t.originalId === originalId);
   const updatePromises = transactionsToUpdate.map(t => {
     const updated = { ...t, ...updates };
-    return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
+    return db && userId ? setDoc(doc(db, 'users', userId, 'transactions', t.id), updated) : Promise.resolve();
   });
   await Promise.all(updatePromises);
   setTransactions(prev => prev.map(t =>
@@ -592,13 +620,37 @@ const editEntireSeries = async (originalId, updates) => {
 // עריכת החל מהמופע הנוכחי והלאה
 const editFromCurrentOnward = async (transaction, updates) => {
   const currentDate = new Date(transaction.date);
+  currentDate.setHours(0, 0, 0, 0);
+  const originalId = transaction.originalId || transaction.id;
+  // 1. Delete all future transactions for the series (from current date onward)
+  const transactionsToDelete = transactions.filter(t => {
+    const txDate = new Date(t.date);
+    return (t.originalId === originalId || t.id === originalId) && txDate >= currentDate && !t.recurring;
+  });
+  if (db && userId) {
+    const updatePromises = transactionsToDelete.map(t =>
+      setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true })
+    );
+    await Promise.all(updatePromises);
+  }
+  setDeletedTransactions(prev => {
+    const newMap = new Map(prev);
+    transactionsToDelete.forEach(t => {
+      const key = t.originalId || t.id;
+      if (!newMap.has(key)) newMap.set(key, new Set());
+      newMap.get(key).add(t.date);
+    });
+    return newMap;
+  });
+  setTransactions(prev => prev.filter(t => !transactionsToDelete.some(td => td.id === t.id)));
+
+  // 2. Update all transactions in the series from current date onward
   const transactionsToUpdate = transactions.filter(t =>
-    (t.originalId === transaction.originalId || t.id === transaction.originalId) &&
-    new Date(t.date) >= currentDate
+    (t.originalId === originalId || t.id === originalId) && new Date(t.date) >= currentDate
   );
   const updatePromises = transactionsToUpdate.map(t => {
     const updated = { ...t, ...updates };
-    return setDoc(doc(db, 'users', userId, 'transactions', t.id), updated);
+    return db && userId ? setDoc(doc(db, 'users', userId, 'transactions', t.id), updated) : Promise.resolve();
   });
   await Promise.all(updatePromises);
   setTransactions(prev => prev.map(t =>

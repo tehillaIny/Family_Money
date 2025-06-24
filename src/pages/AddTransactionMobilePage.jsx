@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, CalendarDays, CheckCircle, Tag, Type, X,
@@ -64,6 +64,9 @@ const AddTransactionMobilePage = () => {
   const [recurrenceEndType, setRecurrenceEndType] = useState(transactionToEdit?.recurrenceEndType || 'count');
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(transactionToEdit?.recurrenceEndDate ? new Date(transactionToEdit.recurrenceEndDate) : new Date());
   const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(transactionToEdit?.recurrenceOccurrences || 12);
+
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const calendarConfirmRef = useRef();
 
   useEffect(() => {
     if (!transactionToEdit && preselectedCategoryId) {
@@ -169,9 +172,9 @@ const AddTransactionMobilePage = () => {
 
         {/* Date & Type */}
         <div className="grid grid-cols-2 gap-3">
-          <Popover>
+          <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full justify-start text-left font-normal h-12">
+              <Button variant="outline" className="w-full justify-start text-left font-normal h-12" onClick={() => setDatePopoverOpen(true)}>
                 <CalendarDays className="ml-2 h-5 w-5 opacity-70" />
                 {selectedDate ? format(selectedDate, 'PPP', { locale: he }) : 'בחר תאריך'}
               </Button>
@@ -180,15 +183,27 @@ const AddTransactionMobilePage = () => {
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={setSelectedDate}
+                onSelect={date => {
+                  if (date && (!selectedDate || date.toISOString() !== selectedDate.toISOString())) {
+                    setSelectedDate(date);
+                  }
+                }}
                 initialFocus
                 locale={he}
                 dir="rtl"
               />
-              <div className="p-2 border-t border-border grid grid-cols-3 gap-1">
+              <div className="p-2 border-t border-border grid grid-cols-4 gap-1">
                 <Button variant="ghost" size="sm" onClick={() => setSelectedDate(new Date())}>היום</Button>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedDate(subDays(new Date(), 1))}>אתמול</Button>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedDate(currentMonthDateFromNav)}>חודש נוכחי</Button>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setDatePopoverOpen(false)}
+                  disabled={!selectedDate}
+                >
+                  אישור
+                </Button>
               </div>
             </PopoverContent>
           </Popover>
