@@ -3,8 +3,14 @@ import React from "react";
 import Papa from "papaparse";
 import { useData } from "@/hooks/useData.jsx";
 import { useToast } from "@/components/ui/use-toast.js";
+import { Button } from '@/components/ui/button.jsx';
 
-const CsvImport = () => {
+const CsvImport = ({
+  className = '',
+  variant = 'outline',
+  children = 'העלאת CSV',
+  ...props
+}) => {
   const { addTransactions, categories } = useData();
   const { toast } = useToast();
 
@@ -108,16 +114,24 @@ const CsvImport = () => {
 
   return (
     <>
-      <label htmlFor="csv-upload" className="btn btn-primary cursor-pointer">
-        העלאת CSV
-      </label>
       <input
         id="csv-upload"
         type="file"
         accept=".csv"
         onChange={handleFileChange}
         style={{ display: "none" }}
+        {...props}
       />
+      <label htmlFor="csv-upload">
+        <Button
+          type="button"
+          variant={variant}
+          className={className}
+          asChild
+        >
+          <span>{children}</span>
+        </Button>
+      </label>
     </>
   );
 };
