@@ -20,6 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog.jsx"
 import { formatDate } from '@/lib/utils.js';
+import { Input } from '@/components/ui/input.jsx';
 
 const TransactionsPage = () => {
   const navigate = useNavigate();
@@ -32,16 +33,22 @@ const TransactionsPage = () => {
     deleteEntireSeries,
     deleteFromCurrentOnward,
     currentDate, 
-    getIconComponent 
+    getIconComponent,
+    searchTransactions
   } = useData();
   
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [dialogAction, setDialogAction] = useState('delete');
   const [selectedTag, setSelectedTag] = useState(null);
+  const [search, setSearch] = useState('');
   
   const filterCategoryId = location.state?.filterCategoryId;
   let transactions = getTransactionsForMonth();
+
+  if (search) {
+    transactions = searchTransactions(search);
+  }
 
   if (filterCategoryId) {
     transactions = transactions.filter(t => t.categoryId === filterCategoryId);
@@ -128,13 +135,26 @@ const TransactionsPage = () => {
       <Header />
       <div className="space-y-6 pb-16">
         <MonthNavigator />
-        <div className="flex justify-between items-center mb-6 px-1">
-          <h1 className="text-2xl font-bold text-foreground">
-            {filterCategoryId ? `עסקאות - ${getCategoryById(filterCategoryId)?.name_he || 'קטגוריה לא ידועה'}` : 'כל העסקאות'}
-          </h1>
-          <Button onClick={() => navigate('/add-transaction', {state: {currentMonthDate: currentDate.toISOString()}})} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <PlusCircle className="ml-2 h-5 w-5" /> הוסף עסקה
-          </Button>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 px-1 gap-2">
+          <div className="flex-1">
+            <Input
+              type="text"
+              placeholder="חיפוש כללי (קטגוריה, תיאור, תגית...)"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex justify-end mt-2 sm:mt-0">
+            <Button onClick={() => navigate('/add-transaction', {state: {currentMonthDate: currentDate.toISOString()}})} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <PlusCircle className="ml-2 h-5 w-5" /> הוסף עסקה
+            </Button>
+          </div>
         </div>
 
         {/* Tag filter */}

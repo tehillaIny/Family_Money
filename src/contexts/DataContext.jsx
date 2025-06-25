@@ -658,6 +658,27 @@ const editFromCurrentOnward = async (transaction, updates) => {
   ));
 };
 
+const searchTransactions = (query) => {
+  if (!query || typeof query !== 'string') return transactions;
+  const lowerQuery = query.toLowerCase();
+  return transactions.filter(t => {
+    // Category name
+    const category = categories.find(c => c.id === t.categoryId);
+    const categoryNameHe = category?.name_he?.toLowerCase() || '';
+    const categoryNameEn = category?.name_en?.toLowerCase() || '';
+    // Description
+    const description = t.description?.toLowerCase() || '';
+    // Tags
+    const tags = (t.tags || []).join(' ').toLowerCase();
+    return (
+      categoryNameHe.includes(lowerQuery) ||
+      categoryNameEn.includes(lowerQuery) ||
+      description.includes(lowerQuery) ||
+      tags.includes(lowerQuery)
+    );
+  });
+};
+
   return (
     <DataContext.Provider value={{
       transactions,
@@ -687,6 +708,7 @@ const editFromCurrentOnward = async (transaction, updates) => {
       resetUserData,
       iconMap,
       initialized,
+      searchTransactions,
     }}>
       {children}
     </DataContext.Provider>
