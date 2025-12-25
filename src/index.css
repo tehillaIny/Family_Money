@@ -1,106 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
 
-    @tailwind base;
-    @tailwind components;
-    @tailwind utilities;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-    :root {
-      --background: 210 40% 98%; /* Light Grayish Blue */
-      --foreground: 224 71% 4%; /* Dark Slate Blue */
-      
-      --card: 0 0% 100%; /* White */
-      --card-foreground: 224 71% 4%; /* Dark Slate Blue */
-      
-      --popover: 0 0% 100%; /* White */
-      --popover-foreground: 224 71% 4%; /* Dark Slate Blue */
-      
-      --primary: 205 90% 45%; /* Bright Blue */
-      --primary-foreground: 0 0% 100%; /* White */
-      
-      --secondary: 210 20% 85%; /* Light Gray */
-      --secondary-foreground: 224 71% 4%; /* Dark Slate Blue */
-      
-      --muted: 210 30% 94%; /* Very Light Gray */
-      --muted-foreground: 215 20% 45%; /* Medium Gray */
-      
-      --accent: 30 90% 55%; /* Bright Orange */
-      --accent-foreground: 0 0% 100%; /* White */
-      
-      --destructive: 0 72% 51%; /* Bright Red */
-      --destructive-foreground: 0 0% 100%; /* White */
-      
-      --border: 210 20% 88%; /* Light Gray Border */
-      --input: 210 20% 88%; /* Light Gray Input Border */
-      --ring: 205 90% 55%; /* Bright Blue Ring */
-      
-      --radius: 0.5rem; /* Standard radius */
-
-      --chart-green: 145 63% 42%; /* Green for income */
-      --chart-red: 0 72% 51%; /* Red for expenses */
-    }
-
-    .dark {
-      --background: 224 71% 4%; 
-      --foreground: 210 40% 98%;
-      
-      --card: 224 30% 12%;
-      --card-foreground: 210 40% 98%;
-      
-      --popover: 224 71% 4%;
-      --popover-foreground: 210 40% 98%;
-      
-      --primary: 205 80% 55%;
-      --primary-foreground: 224 71% 4%;
-      
-      --secondary: 224 20% 20%;
-      --secondary-foreground: 210 40% 98%;
-      
-      --muted: 224 20% 15%;
-      --muted-foreground: 210 30% 70%;
-      
-      --accent: 30 80% 65%;
-      --accent-foreground: 224 71% 4%;
-      
-      --destructive: 0 60% 50%;
-      --destructive-foreground: 210 40% 98%;
-      
-      --border: 224 20% 25%;
-      --input: 224 20% 25%;
-      --ring: 205 80% 55%;
-
-      --chart-green: 145 50% 50%;
-      --chart-red: 0 60% 60%;
-    }
-
-    body {
-      @apply bg-background text-foreground;
-      font-family: 'Arial', 'Helvetica Neue', Helvetica, sans-serif; /* Common Hebrew-friendly font */
-      direction: rtl; /* Right-to-left for Hebrew */
-    }
-    
-    /* Clean card style */
-    .clean-card {
-      @apply bg-card text-card-foreground rounded-xl shadow-lg border border-border;
-    }
-
-    /* Gradient text - adjusted for new theme */
-    .gradient-text {
-      @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
-    }
-
-    /* Custom scrollbar for better aesthetics */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: hsl(var(--muted));
-      border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: hsl(var(--secondary));
-      border-radius: 10px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: hsl(var(--primary) / 0.8);
-    }
+:root {
+  --background: 220 20% 98%; /* רקע בסיס בהיר מאוד */
+  --foreground: 224 71% 4%;
   
+  --card: 0 0% 100%;
+  --card-foreground: 224 71% 4%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 71% 4%;
+  
+  --primary: 262 83% 58%;
+  --primary-foreground: 210 40% 98%;
+  
+  --secondary: 220 14% 97%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  
+  --muted: 220 14% 96%;
+  --muted-foreground: 220 8% 46%;
+  
+  --accent: 262 83% 97%;
+  --accent-foreground: 262 83% 58%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  
+  --border: 220 13% 92%;
+  --input: 220 13% 92%;
+  --ring: 262 83% 58%;
+  
+  --radius: 1rem;
+  
+  --chart-green: 150 50% 45%;
+  --chart-red: 345 80% 60%;
+}
+
+.dark {
+  --background: 224 71% 4%;
+  --foreground: 210 40% 98%;
+  /* ... שאר הגדרות ה-Dark Mode נשארות זהות ... */
+  --card: 224 71% 8%;
+  --card-foreground: 210 40% 98%;
+  --popover: 224 71% 4%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 263 70% 50%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 215 27.9% 16.9%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 215 27.9% 16.9%;
+  --muted-foreground: 217.9 10.6% 64.9%;
+  --accent: 215 27.9% 16.9%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 215 27.9% 16.9%;
+  --input: 215 27.9% 16.9%;
+  --ring: 263 70% 50%;
+  --chart-green: 150 60% 45%;
+  --chart-red: 345 70% 60%;
+}
+
+body {
+  @apply bg-background text-foreground;
+  font-family: 'Rubik', sans-serif;
+  direction: rtl;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  
+  /* רקע נקי ועדין יותר: גרדיאנט ליניארי רך מלמעלה */
+  background: linear-gradient(
+    to bottom,
+    hsl(262, 80%, 98%) 0%,  /* סגול-לבן בהיר מאוד למעלה */
+    hsl(220, 20%, 98%) 40%, /* מעבר לרקע הרגיל */
+    hsl(220, 20%, 98%) 100%
+  );
+}
+
+.dark body {
+  background: linear-gradient(
+    to bottom,
+    hsl(262, 30%, 10%) 0%,
+    hsl(224, 71%, 4%) 40%,
+    hsl(224, 71%, 4%) 100%
+  );
+}
+
+.clean-card {
+  @apply bg-white/60 dark:bg-slate-900/60 backdrop-blur-xl text-card-foreground rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-white/50 dark:border-white/10;
+}
+
+.glass-panel {
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/60 dark:border-white/10 shadow-sm;
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-400;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.2); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.6); }
