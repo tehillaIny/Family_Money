@@ -8,10 +8,12 @@ import {
 
 import { db } from '../firebase';
 import {
-  collection, getDocs, setDoc, deleteDoc, doc, getDoc, writeBatch
+  collection, getDocs, setDoc, deleteDoc, doc, writeBatch
 } from 'firebase/firestore';
 
 const DataContext = createContext();
+
+// --- Icons & Categories Setup ---
 
 const iconMap = {
   Car, BriefcaseSimple, ShoppingBag, Gift, BuildingApartment,
@@ -44,108 +46,98 @@ const defaultCategories = [
   { id: 'cat_other_income', name_en: 'income-else', name_he: 'אחר', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
 ];
 
+const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+// --- DATE UTILS (DEBUG VERSION) ---
+const formatToLocalIso = (dateInput) => {
+    if (!dateInput) return '';
+    
+  
+
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+        return dateInput;
+    }
+
+    const d = new Date(dateInput);
+  
+    d.setHours(12, 0, 0, 0); 
+    
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    
+    const result = `${year}-${month}-${day}`;
+    return result;
+};
+
+// --- Provider ---
+
 export const DataProvider = ({ children }) => {
   const [initialized, setInitialized] = useState(false);
-  const userId = 'demoUser';
+  const userId = 'demoUser'; 
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [deletedTransactions, setDeletedTransactions] = useState(new Map());
 
+  // --- 1. Initial Data Fetching ---
   useEffect(() => {
     const fetchData = async () => {
-      if (!db || !userId) {
-        console.error('❌ Database or userId not available:', { db: !!db, userId });
-        return;
-      }
+      if (!db || !userId) return;
 
       try {
-        console.log('🔍 Fetching transactions and categories...');
-        
-        // Get transactions
         const transactionsSnapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
         const loadedTransactions = transactionsSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(t => !t.deleted); // Filter out deleted transactions
-        
-        console.log('📝 Loaded transactions:', {
-          count: loadedTransactions.length,
-          ids: loadedTransactions.map(t => t.id)
-        });
-        
-        // Initialize deleted transactions state from loaded transactions
+          .filter(t => !t.deleted);
+
         const deletedMap = new Map();
         transactionsSnapshot.docs.forEach(doc => {
           const data = doc.data();
           if (data.deleted) {
             const key = data.originalId || doc.id;
-            if (!deletedMap.has(key)) {
-              deletedMap.set(key, new Set());
-            }
+            if (!deletedMap.has(key)) deletedMap.set(key, new Set());
             deletedMap.get(key).add(data.date);
           }
         });
         setDeletedTransactions(deletedMap);
-        
         setTransactions(loadedTransactions);
 
-        // Get categories
         const categoriesSnapshot = await getDocs(collection(db, 'users', userId, 'categories'));
-        // Build a set of categoryIds referenced by transactions so we prefer keeping those docs
         const usedCategoryIds = new Set((loadedTransactions || []).map(t => t.categoryId).filter(Boolean));
-        // Map categories with both Firestore id and any embedded data id
-        const rawCategories = categoriesSnapshot.docs.map(docSnap => {
-          const data = docSnap.data();
-          return {
-            ...data,
-            // firestoreId is the actual document id used in references by transactions
-            firestoreId: docSnap.id,
-            // dataId is a logical id some old docs may have stored inside the document
-            dataId: data.id,
-          };
-        });
-        // Group by canonical id (prefer dataId if present, otherwise firestoreId)
+        const rawCategories = categoriesSnapshot.docs.map(docSnap => ({
+          ...docSnap.data(),
+          firestoreId: docSnap.id,
+          dataId: docSnap.data().id,
+        }));
+
         const groups = new Map();
         rawCategories.forEach(cat => {
           const canonicalId = cat.dataId || cat.firestoreId;
           if (!groups.has(canonicalId)) groups.set(canonicalId, []);
           groups.get(canonicalId).push(cat);
         });
-        // For each group, choose the category to keep:
-        // 1) Prefer the document whose firestoreId is referenced by transactions
-        // 2) Else prefer the one where firestoreId === canonicalId
-        // 3) Else fallback to the first
+
         const loadedCategories = Array.from(groups.entries()).map(([canonicalId, cats]) => {
           const referenced = cats.find(c => usedCategoryIds.has(c.firestoreId));
           const byIdMatch = cats.find(c => c.firestoreId === canonicalId);
           const chosen = referenced || byIdMatch || cats[0];
-
-          // Merge missing fields from other docs in the group into the chosen one
+          
           const merged = { ...chosen };
           cats.forEach(c => {
-            Object.keys(c).forEach(k => {
-              if (merged[k] === undefined || merged[k] === null || merged[k] === '') {
-                merged[k] = c[k];
-              }
-            });
+             Object.keys(c).forEach(k => {
+               if (merged[k] == null || merged[k] === '') merged[k] = c[k];
+             });
           });
 
-          // Sensible defaults if missing
           if (!merged.type) merged.type = 'expense';
           if (merged.showOnDashboard === undefined) merged.showOnDashboard = merged.type === 'expense';
-
-          // Expose id as the firestore document id so lookups by transaction.categoryId work
+          
           const { firestoreId, dataId, ...rest } = merged;
           return { ...rest, id: firestoreId };
         });
-        
-        console.log('📝 Loaded categories:', {
-          count: loadedCategories.length,
-          ids: loadedCategories.map(c => c.id)
-        });
 
         if (loadedCategories.length === 0) {
-          // Initialize default categories if none exist
           const batch = writeBatch(db);
           defaultCategories.forEach(category => {
             const docRef = doc(db, 'users', userId, 'categories', category.id);
@@ -153,133 +145,130 @@ export const DataProvider = ({ children }) => {
             batch.set(docRef, categoryData);
           });
           await batch.commit();
-
           setCategories(defaultCategories);
         } else {
           setCategories(loadedCategories);
         }
 
-        console.log('✅ Data initialization complete');
         setInitialized(true);
       } catch (error) {
-        console.error('❌ Error loading data from Firestore:', error);
+        console.error('❌ Error loading data:', error);
       }
     };
 
     fetchData();
-  }, [db, userId]);
+  }, [userId]);
 
+  // --- 2. Generator for Recurring Transactions (WITH LOGS) ---
   useEffect(() => {
     if (!initialized || !transactions.length) return;
 
-   const generateFutureRecurringTransactions = async () => {
-  const futureTransactions = [];
-  const today = new Date();
-  const endDate = new Date(today);
+    const generateFutureRecurringTransactions = async () => {
+      const futureTransactions = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const endDate = new Date(today);
       endDate.setFullYear(endDate.getFullYear() + 5);
 
-      // Get all transactions that are part of a recurring series
-      const recurringTransactions = transactions.filter(t => t.recurring || t.originalId);
-      
-      console.log('🔍 DELETED TRANSACTIONS:', 
-        Array.from(deletedTransactions.entries()).map(([key, dates]) => ({
-          key,
-          dates: Array.from(dates)
-        }))
-      );
+      const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
+
+      // Helper to parse strings to Noon Local Time
+      const parseLocalDate = (dateStr) => {
+          if (!dateStr) return new Date();
+          const [y, m, d] = dateStr.split('-').map(Number);
+          return new Date(y, m - 1, d, 12, 0, 0); 
+      };
 
       for (const t of recurringTransactions) {
-    if (!t.recurring || !t.recurrenceFrequency) continue;
+        if (!t.recurrenceFrequency) continue;
 
-    let nextDate = new Date(t.date);
-        let count = 1;
-        let generatedCount = 0;
+        const startDate = parseLocalDate(t.date);
+        const startDay = startDate.getDate(); 
 
-    const maxCount = t.recurrenceEndType === 'count' ? t.recurrenceOccurrences : 100;
-    const endByDate = t.recurrenceEndType === 'date' && t.recurrenceEndDate ? new Date(t.recurrenceEndDate) : endDate;
-
-        // First, advance the date to the next occurrence
-        switch (t.recurrenceFrequency) {
-          case 'monthly':
-            nextDate.setMonth(nextDate.getMonth() + 1);
-            break;
-          case 'weekly':
-            nextDate.setDate(nextDate.getDate() + 7);
-            break;
-          case 'daily':
-            nextDate.setDate(nextDate.getDate() + 1);
-            break;
+        const maxCount = t.recurrenceEndType === 'count' ? (t.recurrenceOccurrences || 100) : 1000;
+        let endByDate = endDate;
+        if (t.recurrenceEndType === 'date' && t.recurrenceEndDate) {
+            endByDate = parseLocalDate(t.recurrenceEndDate);
+            endByDate.setHours(23, 59, 59);
         }
 
-        while (nextDate <= endByDate && count <= maxCount) {
-      const instanceDate = new Date(nextDate);
-      const isoDate = instanceDate.toISOString().slice(0, 10);
+        let count = 1; 
 
-          // Check if this date has been deleted
-          const isDeleted = deletedTransactions.get(t.id)?.has(isoDate) || 
-                          deletedTransactions.get(t.originalId)?.has(isoDate);
+        const calculateNextDate = (index) => {
+            const d = new Date(startDate);
+            d.setHours(12, 0, 0, 0); // Always force Noon
 
-      const alreadyExists = transactions.some(
+            if (t.recurrenceFrequency === 'monthly') {
+                d.setMonth(startDate.getMonth() + index);
+                if (d.getDate() !== startDay) {
+                    d.setDate(0); 
+                }
+            } else if (t.recurrenceFrequency === 'weekly') {
+                d.setDate(startDate.getDate() + (index * 7));
+            } else if (t.recurrenceFrequency === 'daily') {
+                d.setDate(startDate.getDate() + index);
+            }
+            return d;
+        };
+
+        let nextInstanceDate = calculateNextDate(count);
+
+        while (nextInstanceDate <= endByDate && count < maxCount) {
+          
+          const isoDate = formatToLocalIso(nextInstanceDate);
+          
+          const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
+          const alreadyExists = transactions.some(
             (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
-      );
+          );
 
-          if (!alreadyExists && !isDeleted && instanceDate >= today) {
-            const newTransaction = {
-          ...t,
-          id: generateId(),
-          originalId: t.id,
-          date: isoDate,
+          if (!alreadyExists && !isDeleted && nextInstanceDate >= today) {
+            (`      ✅ Adding new instance: ${isoDate}`);
+            futureTransactions.push({
+              ...t,
+              id: generateId(),
+              originalId: t.id,
+              date: isoDate,
               recurring: false,
-            };
-            console.log('➕ GENERATING NEW TRANSACTION:', {
-              id: newTransaction.id,
-              originalId: newTransaction.originalId,
-              date: newTransaction.date,
-              isDeleted,
-              alreadyExists
+              createdAt: Date.now()
             });
-            futureTransactions.push(newTransaction);
-            generatedCount++;
           }
 
-          // Advance to next occurrence
-      switch (t.recurrenceFrequency) {
-        case 'monthly':
-          nextDate.setMonth(nextDate.getMonth() + 1);
-          break;
-        case 'weekly':
-          nextDate.setDate(nextDate.getDate() + 7);
-          break;
-        case 'daily':
-          nextDate.setDate(nextDate.getDate() + 1);
-          break;
+          count++;
+          nextInstanceDate = calculateNextDate(count);
+        }
       }
 
-      count++;
-    }
-  }
-
-  if (futureTransactions.length > 0) {
-        console.log('📝 ADDING NEW TRANSACTIONS:', futureTransactions.map(t => ({
-          id: t.id,
-          originalId: t.originalId,
-          date: t.date
-        })));
-    await addTransactions(futureTransactions);
-  }
-};
+      if (futureTransactions.length > 0) {
+        await addTransactions(futureTransactions);
+      }
+    };
 
     generateFutureRecurringTransactions();
-  }, [initialized, transactions, deletedTransactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialized, transactions.length, deletedTransactions]); 
 
-  const addTransaction = async (transaction) => {
+  // --- 3. CRUD Operations ---
+
+  const addTransaction = async (transaction) => {    
     const id = transaction.id || generateId();
     const createdAt = transaction.createdAt || Date.now();
-    const newTransaction = { ...transaction, id, createdAt };
+    
+    const safeDate = formatToLocalIso(transaction.date);
+    
+    const newTransaction = { 
+        ...transaction, 
+        id, 
+        createdAt,
+        date: safeDate 
+    };
+    
     setTransactions(prev => [...prev, newTransaction]);
     if (db && userId) {
       await setDoc(doc(db, 'users', userId, 'transactions', id), newTransaction);
     }
+    return newTransaction;
   };
 
   const addTransactions = async (transactionsArray) => {
@@ -287,20 +276,33 @@ export const DataProvider = ({ children }) => {
       ...t,
       id: t.id || generateId(),
       createdAt: t.createdAt || Date.now(),
+      date: formatToLocalIso(t.date)
     }));
+    
     setTransactions(prev => [...prev, ...newTransactions]);
+    
     if (db && userId) {
-      for (const t of newTransactions) {
-        await setDoc(doc(db, 'users', userId, 'transactions', t.id), t);
-      }
+      const batch = writeBatch(db);
+      newTransactions.forEach(t => {
+        const docRef = doc(db, 'users', userId, 'transactions', t.id);
+        batch.set(docRef, t);
+      });
+      await batch.commit();
     }
   };
 
   const updateTransaction = async (updatedTransaction) => {
-    setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? { ...t, ...updatedTransaction, createdAt: t.createdAt || updatedTransaction.createdAt || Date.now() } : t)));
+    const safeDate = formatToLocalIso(updatedTransaction.date);
+    
+    const payload = { 
+        ...updatedTransaction, 
+        date: safeDate,
+        createdAt: updatedTransaction.createdAt || Date.now() 
+    };
+
+    setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? payload : t)));
+    
     if (db && userId) {
-      const current = transactions.find(t => t.id === updatedTransaction.id);
-      const payload = { ...current, ...updatedTransaction, createdAt: current?.createdAt || updatedTransaction.createdAt || Date.now() };
       await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), payload);
     }
   };
@@ -312,101 +314,198 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const inferTimestampFromId = (id) => {
-    if (!id || typeof id !== 'string') return 0;
-    if (/^\d+$/.test(id)) return Number(id);
-    const match = id.match(/^[a-z0-9]+/i);
-    if (match) {
-      try {
-        return parseInt(match[0], 36);
-      } catch {
-        return 0;
-      }
+  // --- 4. Special Recurrence Handlers ---
+
+  const deleteSingleTransaction = async (transactionId) => {
+    const transactionToDelete = transactions.find(t => t.id === transactionId);
+    if (!transactionToDelete) return;
+
+    if (db && userId) {
+        await setDoc(doc(db, 'users', userId, 'transactions', transactionId), { 
+            ...transactionToDelete, 
+            deleted: true 
+        });
     }
-    return 0;
+
+    setDeletedTransactions(prev => {
+      const newMap = new Map(prev);
+      const key = transactionToDelete.originalId || transactionToDelete.id;
+      if (!newMap.has(key)) newMap.set(key, new Set());
+      newMap.get(key).add(transactionToDelete.date);
+      return newMap;
+    });
+
+    setTransactions(prev => prev.filter(t => t.id !== transactionId));
   };
+
+  const terminateSeriesAtDate = async (transaction, terminationDate) => {
+    const originalId = transaction.originalId || transaction.id;
+    const originalTransaction = transactions.find(t => t.id === originalId);
+    
+    if (originalTransaction) {
+        const endDateForOldSeries = new Date(terminationDate);
+        endDateForOldSeries.setDate(endDateForOldSeries.getDate() - 1); 
+
+        const updatedOriginal = {
+            ...originalTransaction,
+            recurrenceEndType: 'date',
+            recurrenceEndDate: formatToLocalIso(endDateForOldSeries)
+        };
+        await updateTransaction(updatedOriginal);
+    }
+
+    const terminationIso = formatToLocalIso(terminationDate);
+    
+    const transactionsToDelete = transactions.filter(t => {
+        const isPartOfSeries = t.id === originalId || t.originalId === originalId;
+        return isPartOfSeries && t.date >= terminationIso && t.id !== originalId;
+    });
+
+    if (db && userId && transactionsToDelete.length > 0) {
+        const batch = writeBatch(db);
+        transactionsToDelete.forEach(t => {
+            const docRef = doc(db, 'users', userId, 'transactions', t.id);
+            batch.update(docRef, { deleted: true });
+        });
+        await batch.commit();
+    }
+
+    setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
+    
+    setDeletedTransactions(prev => {
+        const newMap = new Map(prev);
+        transactionsToDelete.forEach(t => {
+            const key = t.originalId || t.id;
+            if (!newMap.has(key)) newMap.set(key, new Set());
+            newMap.get(key).add(t.date);
+        });
+        return newMap;
+    });
+  };
+
+  const deleteFromCurrentOnward = async (transaction) => {
+    const [y, m, d] = transaction.date.split('-').map(Number);
+    const currentDateObj = new Date(y, m - 1, d, 12, 0, 0); 
+    await terminateSeriesAtDate(transaction, currentDateObj);
+  };
+
+  const editFromCurrentOnward = async (transaction, updates) => {
+    const [y, m, d] = transaction.date.split('-').map(Number);
+    const splitDate = new Date(y, m - 1, d, 12, 0, 0); 
+    
+    const originalId = transaction.originalId || transaction.id;
+    const originalTransaction = transactions.find(t => t.id === originalId);
+    
+    if (!originalTransaction) return;
+
+    await terminateSeriesAtDate(transaction, splitDate);
+
+    const newSeriesTransaction = {
+        ...originalTransaction, 
+        ...updates,             
+        id: generateId(),
+        originalId: null,       
+        date: formatToLocalIso(splitDate),
+        createdAt: Date.now(),
+        recurring: true,
+        recurrenceEndType: updates.recurrenceEndType || originalTransaction.recurrenceEndType,
+        recurrenceEndDate: updates.recurrenceEndDate || originalTransaction.recurrenceEndDate,
+        recurrenceOccurrences: updates.recurrenceOccurrences || originalTransaction.recurrenceOccurrences
+    };
+
+    await addTransaction(newSeriesTransaction);
+  };
+
+  const deleteEntireSeries = async (originalId) => {
+    const transactionsToDelete = transactions.filter(t => 
+        t.id === originalId || t.originalId === originalId
+    );
+
+    if (db && userId && transactionsToDelete.length > 0) {
+        const batch = writeBatch(db);
+        transactionsToDelete.forEach(t => {
+            const docRef = doc(db, 'users', userId, 'transactions', t.id);
+            batch.update(docRef, { deleted: true });
+        });
+        await batch.commit();
+    }
+    
+    setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
+  };
+
+  const editSingleTransaction = async (updatedTransaction) => {
+    await updateTransaction(updatedTransaction);
+  };
+
+  const editEntireSeries = async (originalId, updates) => {
+    // 1. מוצאים את כל העסקאות ששייכות לסדרה הזו (כולל האבא)
+    const seriesTransactions = transactions.filter(t => t.id === originalId || t.originalId === originalId);
+    
+    // 2. מוחקים את כל ה"ילדים" (המופעים החוזרים) מהדאטה ומהסטייט
+    // משאירים רק את האבא (originalId) כדי לעדכן אותו
+    const childrenToDelete = seriesTransactions.filter(t => t.id !== originalId);
+    
+    if (db && userId) {
+        const batch = writeBatch(db);
+        
+        // מחיקת הילדים
+        childrenToDelete.forEach(t => {
+            const docRef = doc(db, 'users', userId, 'transactions', t.id);
+            batch.delete(docRef); // מחיקה פיזית (Hard Delete) כדי למנוע כפילויות
+        });
+
+        // עדכון האבא עם ההגדרות החדשות
+        const parentDocRef = doc(db, 'users', userId, 'transactions', originalId);
+        const updatedParent = { ...seriesTransactions.find(t => t.id === originalId), ...updates };
+        // וודאי שהתאריך נשמר תקין
+        if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
+        
+        batch.set(parentDocRef, updatedParent, { merge: true });
+        
+        await batch.commit();
+    }
+
+    // 3. איפוס רשימת המחיקות (החלק הקריטי שהיה חסר!)
+    // אנחנו רוצים שפברואר יחזור אם המשתמש הגדיר את הסדרה מחדש
+    setDeletedTransactions(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(originalId); // מוחקים את ההיסטוריה של "מה מחקתי בסדרה הזו"
+        return newMap;
+    });
+
+    // 4. עדכון הסטייט: משאירים רק את האבא המעודכן, מעיפים את הילדים הישנים
+    // ה-useEffect של הגנרטור יזהה שהילדים חסרים וייצר אותם מחדש נכון מיד
+    setTransactions(prev => {
+        const parent = prev.find(t => t.id === originalId);
+        const updatedParent = { ...parent, ...updates };
+        if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
+
+        // מסננים החוצה את כל הסדרה הישנה, ומחזירים רק את האבא המעודכן
+        const otherTransactions = prev.filter(t => t.id !== originalId && t.originalId !== originalId);
+        return [...otherTransactions, updatedParent];
+    });
+  };
+
+  // --- 5. Data Getters ---
 
   const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const parseLocalDate = (isoDateString) => {
-      // Expecting YYYY-MM-DD; parse as local date at midnight to avoid UTC offset issues
-      if (typeof isoDateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoDateString)) {
-        const [yearStr, monthStr, dayStr] = isoDateString.split('-');
-        const year = Number(yearStr);
-        const monthIndex = Number(monthStr) - 1; // 0-based
-        const day = Number(dayStr);
-        return new Date(year, monthIndex, day, 0, 0, 0, 0);
-      }
-      // Fallback to native parsing
-      return new Date(isoDateString);
-    };
-
-    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
     return transactions
       .filter(t => {
-        const transactionDate = parseLocalDate(t.date);
-        if (excludeFuture) {
-          // Compare by date only (ignore time)
-          if (transactionDate > today) return false;
-        }
-        return (
-          transactionDate.getFullYear() === date.getFullYear() &&
-          transactionDate.getMonth() === date.getMonth()
-        );
+        const [y, m, d] = t.date.split('-').map(Number);
+        const tDate = new Date(y, m - 1, d); 
+        
+        if (excludeFuture && tDate > today) return false;
+        return tDate.getMonth() === date.getMonth() && tDate.getFullYear() === date.getFullYear();
       })
       .sort((a, b) => {
-        const da = parseLocalDate(a.date);
-        const dbd = parseLocalDate(b.date);
-        // Primary: date descending
-        if (dbd.getTime() !== da.getTime()) return dbd - da;
-        // Secondary: createdAt descending (newest first)
-        const ca = a.createdAt ?? inferTimestampFromId(a.id);
-        const cb = b.createdAt ?? inferTimestampFromId(b.id);
-        if (cb !== ca) return cb - ca;
-        // Tertiary: id descending as a final stable-ish fallback
-        return (b.id || '').localeCompare(a.id || '');
+        const da = new Date(a.date);
+        const db_date = new Date(b.date);
+        if (db_date.getTime() !== da.getTime()) return db_date - da;
+        return (b.createdAt || 0) - (a.createdAt || 0);
       });
-  };
-
-  const getCategoryById = (categoryId) => {
-    const category = categories.find(cat => cat.id === categoryId);
-    if (category && !category.icon && category.iconName) {
-      return { ...category, icon: getIconComponent(category.iconName) };
-    }
-    return category;
-  };
-
-  const updateCategory = async (updatedCategory) => {
-    const newCategory = { ...updatedCategory, icon: getIconComponent(updatedCategory.iconName) };
-    setCategories(prev => prev.map(cat => cat.id === newCategory.id ? newCategory : cat));
-    if (db && userId) {
-      const { icon, ...categoryToSave } = updatedCategory;
-      await setDoc(doc(db, 'users', userId, 'categories', newCategory.id), categoryToSave);
-    }
-  };
-
-  const addCategory = async (newCategory) => {
-    const id = 'cat_' + Date.now().toString() + Math.random().toString(16).slice(2);
-    const category = {
-      ...newCategory,
-      id,
-      icon: getIconComponent(newCategory.iconName),
-    };
-    setCategories(prev => [...prev, category]);
-    if (db && userId) {
-      const { icon, ...categoryToSave } = category;
-      await setDoc(doc(db, 'users', userId, 'categories', id), categoryToSave);
-    }
-  };
-
-  const deleteCategory = async (categoryId) => {
-    setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    if (db && userId) {
-      await deleteDoc(doc(db, 'users', userId, 'categories', categoryId));
-    }
   };
 
   const getBalanceForMonth = (date = currentDate) => {
@@ -423,395 +522,88 @@ export const DataProvider = ({ children }) => {
   const getCategorySummariesForMonth = (date = currentDate, type = 'expense') => {
     const monthTransactions = getTransactionsForMonth(date, { excludeFuture: true }).filter(t => t.type === type);
     const summaries = {};
-    monthTransactions.forEach(transaction => {
-      if (!summaries[transaction.categoryId]) {
-        summaries[transaction.categoryId] = 0;
-      }
-      summaries[transaction.categoryId] += parseFloat(transaction.amount || 0);
+    monthTransactions.forEach(t => {
+      summaries[t.categoryId] = (summaries[t.categoryId] || 0) + parseFloat(t.amount || 0);
     });
-    return Object.entries(summaries).map(([categoryId, total]) => ({
-      categoryId,
-      total,
-    }));
+    return Object.entries(summaries).map(([categoryId, total]) => ({ categoryId, total }));
   };
 
-  const getIncomeSummariesForMonth = (date = currentDate) => {
-    return getCategorySummariesForMonth(date, 'income');
+  const getIncomeSummariesForMonth = (date = currentDate) => getCategorySummariesForMonth(date, 'income');
+
+  // --- 6. Categories CRUD ---
+  
+  const addCategory = async (newCategory) => {
+    const id = 'cat_' + Date.now() + Math.random().toString(16).slice(2);
+    const category = { ...newCategory, id };
+    const { icon, ...categoryToSave } = category;
+    
+    setCategories(prev => [...prev, { ...category, icon: getIconComponent(newCategory.iconName) }]);
+    if (db && userId) {
+        await setDoc(doc(db, 'users', userId, 'categories', id), categoryToSave);
+    }
+  };
+
+  const updateCategory = async (updatedCategory) => {
+    const { icon, ...categoryToSave } = updatedCategory;
+    const newCategory = { ...updatedCategory, icon: getIconComponent(updatedCategory.iconName) };
+    
+    setCategories(prev => prev.map(cat => cat.id === newCategory.id ? newCategory : cat));
+    if (db && userId) {
+        await setDoc(doc(db, 'users', userId, 'categories', newCategory.id), categoryToSave);
+    }
+  };
+
+  const deleteCategory = async (categoryId) => {
+    setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+    if (db && userId) {
+        await deleteDoc(doc(db, 'users', userId, 'categories', categoryId));
+    }
+  };
+
+  const getCategoryById = (categoryId) => {
+    const category = categories.find(cat => cat.id === categoryId);
+    if (category && !category.icon && category.iconName) {
+      return { ...category, icon: getIconComponent(category.iconName) };
+    }
+    return category;
   };
 
   const resetUserData = async () => {
-    try {
-      if (!db || !userId) return;
-      const transactionsSnapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
-      const deletePromises = transactionsSnapshot.docs.map(docSnap =>
-        deleteDoc(doc(db, 'users', userId, 'transactions', docSnap.id))
+     if (!db || !userId) return;
+     const snapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
+     const batch = writeBatch(db);
+     snapshot.docs.forEach(doc => batch.delete(doc.ref));
+     await batch.commit();
+     setTransactions([]);
+     setDeletedTransactions(new Map());
+  };
+  
+  const searchTransactions = (query) => {
+    if (!query || typeof query !== 'string') return transactions;
+    const lowerQuery = query.toLowerCase();
+    return transactions.filter(t => {
+      const category = categories.find(c => c.id === t.categoryId);
+      return (
+        category?.name_he?.toLowerCase().includes(lowerQuery) ||
+        t.description?.toLowerCase().includes(lowerQuery) ||
+        (t.tags || []).join(' ').toLowerCase().includes(lowerQuery)
       );
-      await Promise.all(deletePromises);
-      setTransactions([]);
-    } catch (error) {
-      console.error("Error resetting transactions:", error);
-    }
+    });
   };
-
-  // מחיקת מופע בודד
-const deleteSingleTransaction = async (transactionId) => {
-    console.log('🔍 DELETE SINGLE TRANSACTION:', transactionId);
-    
-    // Find the transaction to delete
-    const transactionToDelete = transactions.find(t => t.id === transactionId);
-    if (!transactionToDelete) {
-      console.log('❌ Transaction not found:', transactionId);
-      return;
-    }
-
-    console.log('📝 TRANSACTION TO DELETE:', {
-      id: transactionToDelete.id,
-      originalId: transactionToDelete.originalId,
-      date: transactionToDelete.date,
-      recurring: transactionToDelete.recurring
-    });
-
-    try {
-      if (!db || !userId) {
-        console.error('❌ Database or userId not available:', { db: !!db, userId });
-        throw new Error('Database or userId not available');
-      }
-
-      const docRef = doc(db, 'users', userId, 'transactions', transactionId);
-      
-      // Mark as deleted in the database
-      await setDoc(docRef, { ...transactionToDelete, deleted: true });
-      console.log('✅ MARKED AS DELETED IN DB:', {
-        id: transactionId,
-        originalId: transactionToDelete.originalId,
-        date: transactionToDelete.date
-      });
-      
-      // Update deleted transactions state
-      setDeletedTransactions(prev => {
-        const newMap = new Map(prev);
-        const key = transactionToDelete.originalId || transactionToDelete.id;
-        if (!newMap.has(key)) {
-          newMap.set(key, new Set());
-        }
-        newMap.get(key).add(transactionToDelete.date);
-        console.log('🗑️ UPDATED DELETED TRANSACTIONS:', 
-          Array.from(newMap.entries()).map(([key, dates]) => ({
-            key,
-            dates: Array.from(dates)
-          }))
-        );
-        return newMap;
-      });
-      
-      // Then update state
-      setTransactions(prev => {
-        const newTransactions = prev.filter(t => t.id !== transactionId);
-        console.log('🔄 STATE UPDATED:', {
-          beforeCount: prev.length,
-          afterCount: newTransactions.length,
-          removedId: transactionId
-        });
-        return newTransactions;
-      });
-    } catch (error) {
-      console.error('❌ Error deleting transaction:', error);
-      throw error;
-    }
-  };
-
-  // מחיקת החל מהמופע הנוכחי והלאה
-  const deleteFromCurrentOnward = async (transaction) => {
-    console.log('🔍 DELETE FROM CURRENT ONWARD:', {
-      id: transaction.id,
-      originalId: transaction.originalId,
-      date: transaction.date
-    });
-
-    const currentDate = new Date(transaction.date);
-    const originalId = transaction.originalId || transaction.id;
-    
-    // Find all transactions that are part of this series and are on or after the current date
-    const transactionsToDelete = transactions.filter(t => {
-      const txDate = new Date(t.date);
-      const isPartOfSeries = t.id === originalId || t.originalId === originalId;
-      const shouldDelete = isPartOfSeries && txDate >= currentDate;
-      
-      console.log('🔍 CHECKING TRANSACTION:', {
-        id: t.id,
-        originalId: t.originalId,
-        date: t.date,
-        isPartOfSeries,
-        isAfterCurrentDate: txDate >= currentDate,
-        shouldDelete
-      });
-      
-      return shouldDelete;
-    });
-
-    console.log('📝 TRANSACTIONS TO DELETE:', transactionsToDelete.map(t => ({
-      id: t.id,
-      originalId: t.originalId,
-      date: t.date
-    })));
-
-    try {
-      if (!db || !userId) {
-        console.error('❌ Database or userId not available:', { db: !!db, userId });
-        throw new Error('Database or userId not available');
-      }
-
-      // Mark all transactions as deleted in the database
-      const updatePromises = transactionsToDelete.map(t => {
-        console.log('🗑️ MARKING AS DELETED IN DB:', {
-          id: t.id,
-          originalId: t.originalId,
-          date: t.date
-        });
-        return setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true });
-      });
-      await Promise.all(updatePromises);
-      
-      // Update deleted transactions state
-      setDeletedTransactions(prev => {
-        const newMap = new Map(prev);
-        transactionsToDelete.forEach(t => {
-          const key = t.originalId || t.id;
-          if (!newMap.has(key)) {
-            newMap.set(key, new Set());
-          }
-          newMap.get(key).add(t.date);
-        });
-        console.log('🗑️ UPDATED DELETED TRANSACTIONS:', 
-          Array.from(newMap.entries()).map(([key, dates]) => ({
-            key,
-            dates: Array.from(dates)
-          }))
-        );
-        return newMap;
-      });
-      
-      // Then update state
-      setTransactions(prev => {
-        const newTransactions = prev.filter(t => !transactionsToDelete.some(td => td.id === t.id));
-        console.log('🔄 STATE UPDATED:', {
-          beforeCount: prev.length,
-          afterCount: newTransactions.length,
-          removedIds: transactionsToDelete.map(t => t.id)
-        });
-        return newTransactions;
-      });
-      
-      console.log('✅ Future transactions deleted successfully');
-    } catch (error) {
-      console.error('❌ Error deleting future transactions:', error);
-      throw error;
-  }
-};
-
-// מחיקת כל הסדרה
-const deleteEntireSeries = async (originalId) => {
-    console.log('🔍 deleteEntireSeries called with originalId:', originalId);
-    
-    // Find all transactions that are part of this series
-    const transactionsToDelete = transactions.filter(t => {
-      const isPartOfSeries = t.id === originalId || t.originalId === originalId;
-      console.log('🔍 Checking transaction for series:', {
-        id: t.id,
-        originalId: t.originalId,
-        isPartOfSeries
-      });
-      return isPartOfSeries;
-    });
-    
-    console.log('📝 Found transactions to delete:', transactionsToDelete.map(t => ({
-      id: t.id,
-      originalId: t.originalId,
-      date: t.date
-    })));
-
-    try {
-      if (!db || !userId) {
-        console.error('❌ Database or userId not available:', { db: !!db, userId });
-        throw new Error('Database or userId not available');
-      }
-
-      // Mark all transactions as deleted in the database
-      const updatePromises = transactionsToDelete.map(t => {
-        console.log('🗑️ Marking as deleted in database:', {
-          userId,
-          transactionId: t.id,
-          path: `users/${userId}/transactions/${t.id}`
-        });
-        return setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true });
-      });
-      await Promise.all(updatePromises);
-      
-      // Then update state
-      setTransactions(prev => {
-        const newTransactions = prev.filter(t => !transactionsToDelete.some(td => td.id === t.id));
-        console.log('🔄 State updated:', {
-          beforeCount: prev.length,
-          afterCount: newTransactions.length,
-          removedIds: transactionsToDelete.map(t => t.id)
-        });
-        return newTransactions;
-      });
-      
-      console.log('✅ Series deleted successfully');
-    } catch (error) {
-      console.error('❌ Error deleting series:', error);
-      throw error;
-    }
-};
-
-// עריכת מופע בודד
-const editSingleTransaction = async (updatedTransaction) => {
-  setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? updatedTransaction : t)));
-  if (db && userId) {
-    await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), updatedTransaction);
-  }
-};
-
-// עריכת כל הסדרה
-const editEntireSeries = async (originalId, updates) => {
-  // 1. Delete all future transactions for the series (from today onward)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const transactionsToDelete = transactions.filter(t => {
-    const txDate = new Date(t.date);
-    return (t.originalId === originalId || t.id === originalId) && txDate >= today && !t.recurring;
-  });
-  // Mark as deleted in the database
-  if (db && userId) {
-    const updatePromises = transactionsToDelete.map(t =>
-      setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true })
-    );
-    await Promise.all(updatePromises);
-  }
-  // Update deleted transactions state
-  setDeletedTransactions(prev => {
-    const newMap = new Map(prev);
-    transactionsToDelete.forEach(t => {
-      const key = t.originalId || t.id;
-      if (!newMap.has(key)) newMap.set(key, new Set());
-      newMap.get(key).add(t.date);
-    });
-    return newMap;
-  });
-  // Remove from state
-  setTransactions(prev => prev.filter(t => !transactionsToDelete.some(td => td.id === t.id)));
-
-  // 2. Update all transactions in the series (template and past)
-  const transactionsToUpdate = transactions.filter(t => t.id === originalId || t.originalId === originalId);
-  const updatePromises = transactionsToUpdate.map(t => {
-    const updated = { ...t, ...updates };
-    return db && userId ? setDoc(doc(db, 'users', userId, 'transactions', t.id), updated) : Promise.resolve();
-  });
-  await Promise.all(updatePromises);
-  setTransactions(prev => prev.map(t =>
-    t.id === originalId || t.originalId === originalId ? { ...t, ...updates } : t
-  ));
-};
-
-// עריכת החל מהמופע הנוכחי והלאה
-const editFromCurrentOnward = async (transaction, updates) => {
-  const currentDate = new Date(transaction.date);
-  currentDate.setHours(0, 0, 0, 0);
-  const originalId = transaction.originalId || transaction.id;
-  // 1. Delete all future transactions for the series (from current date onward)
-  const transactionsToDelete = transactions.filter(t => {
-    const txDate = new Date(t.date);
-    return (t.originalId === originalId || t.id === originalId) && txDate >= currentDate && !t.recurring;
-  });
-  if (db && userId) {
-    const updatePromises = transactionsToDelete.map(t =>
-      setDoc(doc(db, 'users', userId, 'transactions', t.id), { ...t, deleted: true })
-    );
-    await Promise.all(updatePromises);
-  }
-  setDeletedTransactions(prev => {
-    const newMap = new Map(prev);
-    transactionsToDelete.forEach(t => {
-      const key = t.originalId || t.id;
-      if (!newMap.has(key)) newMap.set(key, new Set());
-      newMap.get(key).add(t.date);
-    });
-    return newMap;
-  });
-  setTransactions(prev => prev.filter(t => !transactionsToDelete.some(td => td.id === t.id)));
-
-  // 2. Update all transactions in the series from current date onward
-  const transactionsToUpdate = transactions.filter(t =>
-    (t.originalId === originalId || t.id === originalId) && new Date(t.date) >= currentDate
-  );
-  const updatePromises = transactionsToUpdate.map(t => {
-    const updated = { ...t, ...updates };
-    return db && userId ? setDoc(doc(db, 'users', userId, 'transactions', t.id), updated) : Promise.resolve();
-  });
-  await Promise.all(updatePromises);
-  setTransactions(prev => prev.map(t =>
-    transactionsToUpdate.some(tu => tu.id === t.id) ? { ...t, ...updates } : t
-  ));
-};
-
-const searchTransactions = (query) => {
-  if (!query || typeof query !== 'string') return transactions;
-  const lowerQuery = query.toLowerCase();
-  return transactions.filter(t => {
-    // Category name
-    const category = categories.find(c => c.id === t.categoryId);
-    const categoryNameHe = category?.name_he?.toLowerCase() || '';
-    const categoryNameEn = category?.name_en?.toLowerCase() || '';
-    // Description
-    const description = t.description?.toLowerCase() || '';
-    // Tags
-    const tags = (t.tags || []).join(' ').toLowerCase();
-    return (
-      categoryNameHe.includes(lowerQuery) ||
-      categoryNameEn.includes(lowerQuery) ||
-      description.includes(lowerQuery) ||
-      tags.includes(lowerQuery)
-    );
-  });
-};
 
   return (
     <DataContext.Provider value={{
-      transactions,
-      categories,
-      currentDate,
-      setCurrentDate,
-      addTransaction,
-      addTransactions,
-      updateTransaction,
-      deleteTransaction,
-      getTransactionsForMonth,
-      getBalanceForMonth,
-      getCategorySummariesForMonth,
-      getIncomeSummariesForMonth,
-      getCategoryById,
-      setCategories,
-      updateCategory,
-      addCategory,
-      deleteCategory,
-      deleteSingleTransaction,
-      deleteEntireSeries,
-      deleteFromCurrentOnward,
-      editSingleTransaction,
-      editEntireSeries,
-      editFromCurrentOnward,
-      getIconComponent,
-      resetUserData,
-      iconMap,
-      initialized,
-      searchTransactions,
+      transactions, categories, currentDate, setCurrentDate,
+      addTransaction, addTransactions, updateTransaction, deleteTransaction,
+      getTransactionsForMonth, getBalanceForMonth, getCategorySummariesForMonth, getIncomeSummariesForMonth,
+      getCategoryById, setCategories, updateCategory, addCategory, deleteCategory,
+      deleteSingleTransaction, deleteEntireSeries, deleteFromCurrentOnward,
+      editSingleTransaction, editEntireSeries, editFromCurrentOnward,
+      getIconComponent, resetUserData, iconMap, initialized, searchTransactions,
     }}>
       {children}
     </DataContext.Provider>
   );
 };
-
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
 export default DataContext;

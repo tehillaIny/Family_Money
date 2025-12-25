@@ -99,19 +99,29 @@ const AddTransactionMobilePage = () => {
     }
 
     const tagsArray = tagsStr.split(',').map(tag => tag.trim()).filter(Boolean);
+    
+    // --- התיקון כאן: שימוש ב-format במקום toISOString ---
+    // זה מבטיח שהתאריך יישמר בדיוק כמו שבחרת אותו (זמן מקומי)
+    const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+    
+    // אותו דבר לתאריך סיום חזרתיות
+    const formattedRecurrenceEndDate = recurrenceEndDate 
+        ? format(recurrenceEndDate, 'yyyy-MM-dd') 
+        : null;
+
     const transactionData = {
       id: transactionToEdit?.id,
       type,
       amount: finalAmount,
       categoryId: selectedCategoryId,
-      date: selectedDate.toISOString().split('T')[0],
+      date: formattedDate, // <--- כאן היה השינוי
       description,
       tags: tagsArray,
       recurring: isRecurring,
       recurrenceFrequency,
       recurrenceDay,
       recurrenceEndType,
-      recurrenceEndDate: recurrenceEndType === 'date' ? recurrenceEndDate.toISOString().split('T')[0] : null,
+      recurrenceEndDate: recurrenceEndType === 'date' ? formattedRecurrenceEndDate : null, // <--- וגם כאן
       recurrenceOccurrences: recurrenceEndType === 'count' ? recurrenceOccurrences : null,
     };
 
@@ -141,7 +151,7 @@ const AddTransactionMobilePage = () => {
 
     navigate(-1);
   };
-
+  
   const filteredCategories = categories.filter(cat => type === 'income' ? cat.type === 'income' : cat.type !== 'income' || !cat.type);
   const currentCategoryName = getCategoryById(selectedCategoryId)?.name_he || (type === 'income' ? 'בחר קטגורית הכנסה' : 'בחר קטגורית הוצאה');
 
