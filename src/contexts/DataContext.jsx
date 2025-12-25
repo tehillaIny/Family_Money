@@ -91,7 +91,53 @@ export const DataProvider = ({ children }) => {
 
         // Get categories
         const categoriesSnapshot = await getDocs(collection(db, 'users', userId, 'categories'));
-        const loadedCategories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Build a set of categoryIds referenced by transactions so we prefer keeping those docs
+        const usedCategoryIds = new Set((loadedTransactions || []).map(t => t.categoryId).filter(Boolean));
+        // Map categories with both Firestore id and any embedded data id
+        const rawCategories = categoriesSnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            ...data,
+            // firestoreId is the actual document id used in references by transactions
+            firestoreId: docSnap.id,
+            // dataId is a logical id some old docs may have stored inside the document
+            dataId: data.id,
+          };
+        });
+        // Group by canonical id (prefer dataId if present, otherwise firestoreId)
+        const groups = new Map();
+        rawCategories.forEach(cat => {
+          const canonicalId = cat.dataId || cat.firestoreId;
+          if (!groups.has(canonicalId)) groups.set(canonicalId, []);
+          groups.get(canonicalId).push(cat);
+        });
+        // For each group, choose the category to keep:
+        // 1) Prefer the document whose firestoreId is referenced by transactions
+        // 2) Else prefer the one where firestoreId === canonicalId
+        // 3) Else fallback to the first
+        const loadedCategories = Array.from(groups.entries()).map(([canonicalId, cats]) => {
+          const referenced = cats.find(c => usedCategoryIds.has(c.firestoreId));
+          const byIdMatch = cats.find(c => c.firestoreId === canonicalId);
+          const chosen = referenced || byIdMatch || cats[0];
+
+          // Merge missing fields from other docs in the group into the chosen one
+          const merged = { ...chosen };
+          cats.forEach(c => {
+            Object.keys(c).forEach(k => {
+              if (merged[k] === undefined || merged[k] === null || merged[k] === '') {
+                merged[k] = c[k];
+              }
+            });
+          });
+
+          // Sensible defaults if missing
+          if (!merged.type) merged.type = 'expense';
+          if (merged.showOnDashboard === undefined) merged.showOnDashboard = merged.type === 'expense';
+
+          // Expose id as the firestore document id so lookups by transaction.categoryId work
+          const { firestoreId, dataId, ...rest } = merged;
+          return { ...rest, id: firestoreId };
+        });
         
         console.log('📝 Loaded categories:', {
           count: loadedCategories.length,
@@ -102,8 +148,9 @@ export const DataProvider = ({ children }) => {
           // Initialize default categories if none exist
           const batch = writeBatch(db);
           defaultCategories.forEach(category => {
-            const docRef = doc(collection(db, 'users', userId, 'categories'));
-            batch.set(docRef, category);
+            const docRef = doc(db, 'users', userId, 'categories', category.id);
+            const { id, ...categoryData } = category;
+            batch.set(docRef, categoryData);
           });
           await batch.commit();
 
@@ -227,7 +274,8 @@ export const DataProvider = ({ children }) => {
 
   const addTransaction = async (transaction) => {
     const id = transaction.id || generateId();
-    const newTransaction = { ...transaction, id };
+    const createdAt = transaction.createdAt || Date.now();
+    const newTransaction = { ...transaction, id, createdAt };
     setTransactions(prev => [...prev, newTransaction]);
     if (db && userId) {
       await setDoc(doc(db, 'users', userId, 'transactions', id), newTransaction);
@@ -237,7 +285,8 @@ export const DataProvider = ({ children }) => {
   const addTransactions = async (transactionsArray) => {
     const newTransactions = transactionsArray.map(t => ({
       ...t,
-      id: t.id || generateId()
+      id: t.id || generateId(),
+      createdAt: t.createdAt || Date.now(),
     }));
     setTransactions(prev => [...prev, ...newTransactions]);
     if (db && userId) {
@@ -248,9 +297,11 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateTransaction = async (updatedTransaction) => {
-    setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? updatedTransaction : t)));
+    setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? { ...t, ...updatedTransaction, createdAt: t.createdAt || updatedTransaction.createdAt || Date.now() } : t)));
     if (db && userId) {
-      await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), updatedTransaction);
+      const current = transactions.find(t => t.id === updatedTransaction.id);
+      const payload = { ...current, ...updatedTransaction, createdAt: current?.createdAt || updatedTransaction.createdAt || Date.now() };
+      await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), payload);
     }
   };
 
@@ -259,6 +310,65 @@ export const DataProvider = ({ children }) => {
     if (db && userId) {
       await deleteDoc(doc(db, 'users', userId, 'transactions', transactionId));
     }
+  };
+
+  const inferTimestampFromId = (id) => {
+    if (!id || typeof id !== 'string') return 0;
+    if (/^\d+$/.test(id)) return Number(id);
+    const match = id.match(/^[a-z0-9]+/i);
+    if (match) {
+      try {
+        return parseInt(match[0], 36);
+      } catch {
+        return 0;
+      }
+    }
+    return 0;
+  };
+
+  const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const parseLocalDate = (isoDateString) => {
+      // Expecting YYYY-MM-DD; parse as local date at midnight to avoid UTC offset issues
+      if (typeof isoDateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoDateString)) {
+        const [yearStr, monthStr, dayStr] = isoDateString.split('-');
+        const year = Number(yearStr);
+        const monthIndex = Number(monthStr) - 1; // 0-based
+        const day = Number(dayStr);
+        return new Date(year, monthIndex, day, 0, 0, 0, 0);
+      }
+      // Fallback to native parsing
+      return new Date(isoDateString);
+    };
+
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    return transactions
+      .filter(t => {
+        const transactionDate = parseLocalDate(t.date);
+        if (excludeFuture) {
+          // Compare by date only (ignore time)
+          if (transactionDate > today) return false;
+        }
+        return (
+          transactionDate.getFullYear() === date.getFullYear() &&
+          transactionDate.getMonth() === date.getMonth()
+        );
+      })
+      .sort((a, b) => {
+        const da = parseLocalDate(a.date);
+        const dbd = parseLocalDate(b.date);
+        // Primary: date descending
+        if (dbd.getTime() !== da.getTime()) return dbd - da;
+        // Secondary: createdAt descending (newest first)
+        const ca = a.createdAt ?? inferTimestampFromId(a.id);
+        const cb = b.createdAt ?? inferTimestampFromId(b.id);
+        if (cb !== ca) return cb - ca;
+        // Tertiary: id descending as a final stable-ish fallback
+        return (b.id || '').localeCompare(a.id || '');
+      });
   };
 
   const getCategoryById = (categoryId) => {
@@ -297,19 +407,6 @@ export const DataProvider = ({ children }) => {
     if (db && userId) {
       await deleteDoc(doc(db, 'users', userId, 'categories', categoryId));
     }
-  };
-
-  const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return transactions
-      .filter(t => {
-        const transactionDate = new Date(t.date);
-        if (excludeFuture && transactionDate > today) return false;
-        return transactionDate.getFullYear() === date.getFullYear() &&
-               transactionDate.getMonth() === date.getMonth();
-      })
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   const getBalanceForMonth = (date = currentDate) => {
