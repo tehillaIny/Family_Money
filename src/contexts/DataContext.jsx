@@ -10,6 +10,7 @@ import { db } from '../firebase';
 import {
   collection, getDocs, setDoc, deleteDoc, doc, writeBatch
 } from 'firebase/firestore';
+import { useAuth } from './AuthContext'; // ייבוא ה-Auth
 
 const DataContext = createContext();
 
@@ -48,33 +49,33 @@ const defaultCategories = [
 
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
-// --- DATE UTILS (DEBUG VERSION) ---
+// --- DATE UTILS ---
 const formatToLocalIso = (dateInput) => {
     if (!dateInput) return '';
     
-  
-
     if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
         return dateInput;
     }
 
     const d = new Date(dateInput);
-  
     d.setHours(12, 0, 0, 0); 
     
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     
-    const result = `${year}-${month}-${day}`;
-    return result;
+    return `${year}-${month}-${day}`;
 };
 
 // --- Provider ---
 
 export const DataProvider = ({ children }) => {
   const [initialized, setInitialized] = useState(false);
-  const userId = 'demoUser'; 
+  
+  // כאן השתנה: מושכים גם את נתוני המשתמש
+  const { familyId, userData, currentUser } = useAuth();
+  
+  const userId = familyId; // משתמשים במזהה המשפחה עבור המסד נתונים
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -159,7 +160,7 @@ export const DataProvider = ({ children }) => {
     fetchData();
   }, [userId]);
 
-  // --- 2. Generator for Recurring Transactions (WITH LOGS) ---
+  // --- 2. Generator for Recurring Transactions ---
   useEffect(() => {
     if (!initialized || !transactions.length) return;
 
@@ -173,7 +174,6 @@ export const DataProvider = ({ children }) => {
 
       const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
 
-      // Helper to parse strings to Noon Local Time
       const parseLocalDate = (dateStr) => {
           if (!dateStr) return new Date();
           const [y, m, d] = dateStr.split('-').map(Number);
@@ -197,7 +197,7 @@ export const DataProvider = ({ children }) => {
 
         const calculateNextDate = (index) => {
             const d = new Date(startDate);
-            d.setHours(12, 0, 0, 0); // Always force Noon
+            d.setHours(12, 0, 0, 0); 
 
             if (t.recurrenceFrequency === 'monthly') {
                 d.setMonth(startDate.getMonth() + index);
@@ -224,7 +224,6 @@ export const DataProvider = ({ children }) => {
           );
 
           if (!alreadyExists && !isDeleted && nextInstanceDate >= today) {
-            (`      ✅ Adding new instance: ${isoDate}`);
             futureTransactions.push({
               ...t,
               id: generateId(),
@@ -249,7 +248,7 @@ export const DataProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialized, transactions.length, deletedTransactions]); 
 
-  // --- 3. CRUD Operations ---
+  // --- 3. CRUD Operations (עם עדכון שם יוצר) ---
 
   const addTransaction = async (transaction) => {    
     const id = transaction.id || generateId();
@@ -257,11 +256,16 @@ export const DataProvider = ({ children }) => {
     
     const safeDate = formatToLocalIso(transaction.date);
     
+    // חישוב שם היוצר (אם קיים שם, או חותכים את המייל)
+    const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
+
     const newTransaction = { 
         ...transaction, 
         id, 
         createdAt,
-        date: safeDate 
+        date: safeDate,
+        createdBy: currentUser?.uid, // המזהה של מי שיצר
+        creatorName: creatorName     // השם של מי שיצר
     };
     
     setTransactions(prev => [...prev, newTransaction]);
@@ -400,6 +404,9 @@ export const DataProvider = ({ children }) => {
 
     await terminateSeriesAtDate(transaction, splitDate);
 
+    // גם כאן צריך לוודא שאנחנו מעבירים את שם היוצר המעודכן אם צריך
+    const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
+
     const newSeriesTransaction = {
         ...originalTransaction, 
         ...updates,             
@@ -410,7 +417,9 @@ export const DataProvider = ({ children }) => {
         recurring: true,
         recurrenceEndType: updates.recurrenceEndType || originalTransaction.recurrenceEndType,
         recurrenceEndDate: updates.recurrenceEndDate || originalTransaction.recurrenceEndDate,
-        recurrenceOccurrences: updates.recurrenceOccurrences || originalTransaction.recurrenceOccurrences
+        recurrenceOccurrences: updates.recurrenceOccurrences || originalTransaction.recurrenceOccurrences,
+        createdBy: currentUser?.uid,
+        creatorName: creatorName
     };
 
     await addTransaction(newSeriesTransaction);
@@ -438,26 +447,18 @@ export const DataProvider = ({ children }) => {
   };
 
   const editEntireSeries = async (originalId, updates) => {
-    // 1. מוצאים את כל העסקאות ששייכות לסדרה הזו (כולל האבא)
     const seriesTransactions = transactions.filter(t => t.id === originalId || t.originalId === originalId);
-    
-    // 2. מוחקים את כל ה"ילדים" (המופעים החוזרים) מהדאטה ומהסטייט
-    // משאירים רק את האבא (originalId) כדי לעדכן אותו
     const childrenToDelete = seriesTransactions.filter(t => t.id !== originalId);
     
     if (db && userId) {
         const batch = writeBatch(db);
-        
-        // מחיקת הילדים
         childrenToDelete.forEach(t => {
             const docRef = doc(db, 'users', userId, 'transactions', t.id);
-            batch.delete(docRef); // מחיקה פיזית (Hard Delete) כדי למנוע כפילויות
+            batch.delete(docRef); 
         });
 
-        // עדכון האבא עם ההגדרות החדשות
         const parentDocRef = doc(db, 'users', userId, 'transactions', originalId);
         const updatedParent = { ...seriesTransactions.find(t => t.id === originalId), ...updates };
-        // וודאי שהתאריך נשמר תקין
         if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
         
         batch.set(parentDocRef, updatedParent, { merge: true });
@@ -465,22 +466,17 @@ export const DataProvider = ({ children }) => {
         await batch.commit();
     }
 
-    // 3. איפוס רשימת המחיקות (החלק הקריטי שהיה חסר!)
-    // אנחנו רוצים שפברואר יחזור אם המשתמש הגדיר את הסדרה מחדש
     setDeletedTransactions(prev => {
         const newMap = new Map(prev);
-        newMap.delete(originalId); // מוחקים את ההיסטוריה של "מה מחקתי בסדרה הזו"
+        newMap.delete(originalId); 
         return newMap;
     });
 
-    // 4. עדכון הסטייט: משאירים רק את האבא המעודכן, מעיפים את הילדים הישנים
-    // ה-useEffect של הגנרטור יזהה שהילדים חסרים וייצר אותם מחדש נכון מיד
     setTransactions(prev => {
         const parent = prev.find(t => t.id === originalId);
         const updatedParent = { ...parent, ...updates };
         if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
 
-        // מסננים החוצה את כל הסדרה הישנה, ומחזירים רק את האבא המעודכן
         const otherTransactions = prev.filter(t => t.id !== originalId && t.originalId !== originalId);
         return [...otherTransactions, updatedParent];
     });
