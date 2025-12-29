@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/hooks/useData.jsx';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select.jsx';
 import { 
     Check, Palette, LogOut, User, ShieldAlert, Trash2, 
-    Database, ArrowDownToLine, Users, Copy, CheckCheck, UserCog, Pencil
+    Users, Copy, CheckCheck, Pencil
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast.js';
 import {
@@ -26,10 +26,6 @@ import {
 } from "@/components/ui/alert-dialog.jsx";
 import CsvExportButton from "@/components/ui/CsvExportButton.jsx";
 import CsvImport from "@/components/shared/CsvImport.jsx";
-
-// --- Imports for Migration ---
-import { db } from '@/firebase';
-import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
 
 // אייקונים לקטגוריות
 import {
@@ -168,7 +164,7 @@ const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent })
 export default function SettingsPage() {
   const { 
     logout, currentUser, familyId, joinFamily, familyMembers, 
-    updateUserProfile, userData // הוספנו את הפונקציה לעדכון שם ואת נתוני המשתמש
+    updateUserProfile, userData
   } = useAuth();
   
   const navigate = useNavigate();
@@ -183,7 +179,6 @@ export default function SettingsPage() {
 
   const [editingCategory, setEditingCategory] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isMigrating, setIsMigrating] = useState(false);
   
   // State עבור הצטרפות למשפחה
   const [targetFamilyCode, setTargetFamilyCode] = useState('');
@@ -228,67 +223,23 @@ export default function SettingsPage() {
 
   const handleCancelEdit = () => { setIsDialogOpen(false); setEditingCategory(null); };
   const handleEditCategory = (category) => { setEditingCategory(category); setIsDialogOpen(true); };
+  
   const handleDeleteCategory = (categoryId) => {
     if (window.confirm('האם אתה בטוח שברצונך למחוק קטגוריה זו?')) {
       deleteCategory(categoryId);
       toast({ title: 'קטגוריה נמחקה בהצלחה' });
     }
   };
+
   const handleImportCategories = (importedCategories) => {
     importedCategories.forEach(cat => addCategory(cat));
     toast({ title: 'קטגוריות יובאו בהצלחה' });
   };
+
+  // פונקציית איפוס נתונים
   const handleResetUserData = async () => {
     await resetUserData();
     toast({ title: 'הנתונים אופסו בהצלחה' });
-  };
-
-  const handleImportFromDemo = async () => {
-    if (!familyId) {
-        toast({ title: "שגיאה", description: "לא נמצא מזהה משפחה", variant: "destructive" });
-        return;
-    }
-    setIsMigrating(true);
-    try {
-        const batchSize = 450;
-        let batchCount = 0;
-        const demoCatsRef = collection(db, 'users', 'demoUser', 'categories');
-        const demoCatsSnapshot = await getDocs(demoCatsRef);
-        const demoTransRef = collection(db, 'users', 'demoUser', 'transactions');
-        const demoTransSnapshot = await getDocs(demoTransRef);
-
-        if (demoCatsSnapshot.empty && demoTransSnapshot.empty) {
-            toast({ title: "לא נמצאו נתונים", description: "החשבון 'דמו' ריק." });
-            setIsMigrating(false);
-            return;
-        }
-
-        const allDocsToCopy = [
-            ...demoCatsSnapshot.docs.map(d => ({ type: 'category', data: d.data(), id: d.id })),
-            ...demoTransSnapshot.docs.map(d => ({ type: 'transaction', data: d.data(), id: d.id }))
-        ];
-
-        console.log(`Found ${allDocsToCopy.length} documents to migrate...`);
-
-        for (let i = 0; i < allDocsToCopy.length; i += batchSize) {
-            const chunk = allDocsToCopy.slice(i, i + batchSize);
-            const batch = writeBatch(db);
-            chunk.forEach(item => {
-                const collectionName = item.type === 'category' ? 'categories' : 'transactions';
-                const docRef = doc(db, 'users', familyId, collectionName, item.id);
-                batch.set(docRef, item.data);
-            });
-            await batch.commit();
-            batchCount++;
-        }
-        toast({ title: "ההעברה הושלמה בהצלחה!", description: `הועתקו ${allDocsToCopy.length} פריטים לחשבון שלך.` });
-        setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
-        console.error("Migration failed:", error);
-        toast({ title: "שגיאה בהעברה", description: error.message, variant: "destructive" });
-    } finally {
-        setIsMigrating(false);
-    }
   };
 
   const handleCopyFamilyCode = () => {
@@ -356,7 +307,7 @@ export default function SettingsPage() {
 
       <div className="space-y-6 container mx-auto p-4">
         
-        {/* --- כרטיסייה 1: החשבון שלי (משודרגת) --- */}
+        {/* --- כרטיסייה 1: החשבון שלי --- */}
         <Card className="max-w-3xl mx-auto shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -366,7 +317,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             
-            {/* אזור פרטים אישיים משודרג */}
+            {/* אזור פרטים אישיים */}
             <div className="flex items-center justify-between bg-secondary/30 p-3 rounded-lg border border-border">
                 <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground font-medium">מחובר כ:</span>
@@ -457,27 +408,7 @@ export default function SettingsPage() {
             </CardContent>
         </Card>
 
-        {/* --- כרטיסייה 3: הגירת נתונים --- */}
-        <Card className="max-w-3xl mx-auto shadow-sm border-blue-100 dark:border-blue-900/30">
-             <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg text-blue-600">
-                    <Database className="h-5 w-5" />
-                    הגירת נתונים
-                </CardTitle>
-                <CardDescription>ייבוא נתונים מגרסת הדמו.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <Button 
-                    onClick={handleImportFromDemo} 
-                    disabled={isMigrating}
-                    className="w-full sm:w-auto gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                    {isMigrating ? 'מעביר נתונים...' : <><ArrowDownToLine className="h-4 w-4" /> ייבא נתונים</>}
-                </Button>
-            </CardContent>
-        </Card>
-
-        {/* --- כרטיסייה 4: ניהול קטגוריות --- */}
+        {/* --- כרטיסייה 3: ניהול קטגוריות (הייתה 4, כעת 3) --- */}
         <Card className="max-w-3xl mx-auto shadow-sm">
             <CardHeader><CardTitle>ניהול קטגוריות</CardTitle></CardHeader>
             <CardContent>
@@ -518,12 +449,18 @@ export default function SettingsPage() {
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>איפוס נתונים מלא</AlertDialogTitle>
-                      <AlertDialogDescription>פעולה זו תמחק את כל המידע בחשבון.<br/><b>לא ניתן לשחזר.</b></AlertDialogDescription>
+                      <AlertDialogTitle>איפוס נתונים בחשבון זה</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        פעולה זו תמחק את כל העסקאות והנתונים <b>בחשבון המשפחתי הנוכחי בלבד.</b>
+                        <br/>
+                        המידע לא יימחק מחשבונות אחרים במערכת.
+                        <br/>
+                        <b>לא ניתן לשחזר את המידע לאחר המחיקה.</b>
+                      </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>ביטול</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleResetUserData} className="bg-red-600 text-white">כן, אפס הכל</AlertDialogAction>
+                      <AlertDialogAction onClick={handleResetUserData} className="bg-red-600 text-white">כן, אפס את החשבון שלי</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -540,7 +477,7 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* דיאלוג עריכת שם (פרופיל) - חדש! */}
+      {/* דיאלוג עריכת שם (פרופיל) */}
       <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
