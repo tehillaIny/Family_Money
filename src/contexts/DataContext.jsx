@@ -10,7 +10,7 @@ import { db } from '../firebase';
 import {
   collection, getDocs, setDoc, deleteDoc, doc, writeBatch
 } from 'firebase/firestore';
-import { useAuth } from './AuthContext'; // ייבוא ה-Auth
+import { useAuth } from './AuthContext';
 
 const DataContext = createContext();
 
@@ -47,7 +47,8 @@ const defaultCategories = [
   { id: 'cat_other_income', name_en: 'income-else', name_he: 'אחר', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
 ];
 
-const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+// יצירת מזהה ייחודי ובטוח ב-100% באמצעות המנגנון המובנה של פיירבייס
+const generateId = () => doc(collection(db, 'transactions')).id;
 
 // --- DATE UTILS ---
 const formatToLocalIso = (dateInput) => {
@@ -72,10 +73,9 @@ const formatToLocalIso = (dateInput) => {
 export const DataProvider = ({ children }) => {
   const [initialized, setInitialized] = useState(false);
   
-  // כאן השתנה: מושכים גם את נתוני המשתמש
   const { familyId, userData, currentUser } = useAuth();
   
-  const userId = familyId; // משתמשים במזהה המשפחה עבור המסד נתונים
+  const userId = familyId; 
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -169,8 +169,8 @@ export const DataProvider = ({ children }) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const endDate = new Date(today);
-      endDate.setFullYear(endDate.getFullYear() + 5);
+      const endDate = new Date(currentDate);
+      endDate.setMonth(endDate.getMonth() + 3);
 
       const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
 
@@ -189,8 +189,9 @@ export const DataProvider = ({ children }) => {
         const maxCount = t.recurrenceEndType === 'count' ? (t.recurrenceOccurrences || 100) : 1000;
         let endByDate = endDate;
         if (t.recurrenceEndType === 'date' && t.recurrenceEndDate) {
-            endByDate = parseLocalDate(t.recurrenceEndDate);
-            endByDate.setHours(23, 59, 59);
+            const explicitEndDate = parseLocalDate(t.recurrenceEndDate);
+            explicitEndDate.setHours(23, 59, 59);
+            endByDate = explicitEndDate < endDate ? explicitEndDate : endDate;
         }
 
         let count = 1; 
@@ -246,9 +247,9 @@ export const DataProvider = ({ children }) => {
 
     generateFutureRecurringTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialized, transactions.length, deletedTransactions]); 
+  }, [initialized, transactions.length, deletedTransactions, currentDate]); 
 
-  // --- 3. CRUD Operations (עם עדכון שם יוצר) ---
+  // --- 3. CRUD Operations ---
 
   const addTransaction = async (transaction) => {    
     const id = transaction.id || generateId();
@@ -256,7 +257,6 @@ export const DataProvider = ({ children }) => {
     
     const safeDate = formatToLocalIso(transaction.date);
     
-    // חישוב שם היוצר (אם קיים שם, או חותכים את המייל)
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newTransaction = { 
@@ -264,8 +264,8 @@ export const DataProvider = ({ children }) => {
         id, 
         createdAt,
         date: safeDate,
-        createdBy: currentUser?.uid, // המזהה של מי שיצר
-        creatorName: creatorName     // השם של מי שיצר
+        createdBy: currentUser?.uid, 
+        creatorName: creatorName     
     };
     
     setTransactions(prev => [...prev, newTransaction]);
@@ -276,6 +276,8 @@ export const DataProvider = ({ children }) => {
   };
 
   const addTransactions = async (transactionsArray) => {
+    if (transactionsArray.length === 0) return;
+    
     const newTransactions = transactionsArray.map(t => ({
       ...t,
       id: t.id || generateId(),
@@ -404,7 +406,6 @@ export const DataProvider = ({ children }) => {
 
     await terminateSeriesAtDate(transaction, splitDate);
 
-    // גם כאן צריך לוודא שאנחנו מעבירים את שם היוצר המעודכן אם צריך
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newSeriesTransaction = {
@@ -529,7 +530,8 @@ export const DataProvider = ({ children }) => {
   // --- 6. Categories CRUD ---
   
   const addCategory = async (newCategory) => {
-    const id = 'cat_' + Date.now() + Math.random().toString(16).slice(2);
+    // השתמשנו במזהה הבטוח גם לקטגוריות
+    const id = 'cat_' + doc(collection(db, 'categories')).id;
     const category = { ...newCategory, id };
     const { icon, ...categoryToSave } = category;
     
@@ -574,16 +576,26 @@ export const DataProvider = ({ children }) => {
      setDeletedTransactions(new Map());
   };
   
-  const searchTransactions = (query) => {
-    if (!query || typeof query !== 'string') return transactions;
-    const lowerQuery = query.toLowerCase();
-    return transactions.filter(t => {
-      const category = categories.find(c => c.id === t.categoryId);
-      return (
-        category?.name_he?.toLowerCase().includes(lowerQuery) ||
-        t.description?.toLowerCase().includes(lowerQuery) ||
-        (t.tags || []).join(' ').toLowerCase().includes(lowerQuery)
-      );
+ const searchTransactions = (query) => {
+    let filtered = transactions;
+    
+    if (query && typeof query === 'string') {
+      const lowerQuery = query.toLowerCase();
+      filtered = transactions.filter(t => {
+        const category = categories.find(c => c.id === t.categoryId);
+        return (
+          category?.name_he?.toLowerCase().includes(lowerQuery) ||
+          t.description?.toLowerCase().includes(lowerQuery) ||
+          (t.tags || []).join(' ').toLowerCase().includes(lowerQuery)
+        );
+      });
+    }
+
+    return filtered.sort((a, b) => {
+      const da = new Date(a.date);
+      const db_date = new Date(b.date);
+      if (db_date.getTime() !== da.getTime()) return db_date - da;
+      return (b.createdAt || 0) - (a.createdAt || 0);
     });
   };
 

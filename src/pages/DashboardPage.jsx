@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MonthNavigator from '@/components/shared/MonthNavigator.jsx';
 import { DollarSign } from 'lucide-react';
@@ -7,6 +7,25 @@ import { useData } from '@/hooks/useData.jsx';
 import Header from '@/components/shared/Header.jsx';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
+// מילון צבעים בטוח מ-Tailwind Purge (מהתיקון הקודם שלנו)
+const colorMap = {
+  'text-blue-500': { text: 'text-blue-500', bg: 'bg-blue-500/10' },
+  'text-purple-500': { text: 'text-purple-500', bg: 'bg-purple-500/10' },
+  'text-pink-500': { text: 'text-pink-500', bg: 'bg-pink-500/10' },
+  'text-orange-500': { text: 'text-orange-500', bg: 'bg-orange-500/10' },
+  'text-yellow-500': { text: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+  'text-red-500': { text: 'text-red-500', bg: 'bg-red-500/10' },
+  'text-teal-500': { text: 'text-teal-500', bg: 'bg-teal-500/10' },
+  'text-cyan-500': { text: 'text-cyan-500', bg: 'bg-cyan-500/10' },
+  'text-lime-500': { text: 'text-lime-500', bg: 'bg-lime-500/10' },
+  'text-fuchsia-500': { text: 'text-fuchsia-500', bg: 'bg-fuchsia-500/10' },
+  'text-sky-500': { text: 'text-sky-500', bg: 'bg-sky-500/10' },
+  'text-green-500': { text: 'text-green-500', bg: 'bg-green-500/10' },
+  'text-gray-500': { text: 'text-gray-500', bg: 'bg-gray-500/10' },
+  'text-emerald-500': { text: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+  'text-indigo-500': { text: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+};
+
 const DashboardPage = () => {
   const navigate = useNavigate();
   const {
@@ -14,20 +33,30 @@ const DashboardPage = () => {
     getCategorySummariesForMonth,
     categories: allCategories,
     getIconComponent,
+    transactions, // הוספנו את זה כדי לדעת מתי עסקאות משתנות
+    currentDate   // הוספנו את זה כדי לדעת מתי החודש משתנה
   } = useData();
 
-  const { income, expenses } = getBalanceForMonth();
-  const monthlyCategorySummaries = getCategorySummariesForMonth();
+  // התיקון: עוטפים את החישובים הכבדים ב-useMemo
+  const { income, expenses } = useMemo(() => {
+    return getBalanceForMonth();
+  }, [transactions, currentDate, getBalanceForMonth]);
 
-  const dashboardDisplayCategories = allCategories
-    .filter(cat => cat.showOnDashboard && cat.type === 'expense')
-    .map(cat => {
-      const summary = monthlyCategorySummaries.find(s => s.categoryId === cat.id);
-      return {
-        ...cat,
-        total: summary ? summary.total : 0,
-      };
-    });
+  const monthlyCategorySummaries = useMemo(() => {
+    return getCategorySummariesForMonth();
+  }, [transactions, currentDate, getCategorySummariesForMonth]);
+
+  const dashboardDisplayCategories = useMemo(() => {
+    return allCategories
+      .filter(cat => cat.showOnDashboard && cat.type === 'expense')
+      .map(cat => {
+        const summary = monthlyCategorySummaries.find(s => s.categoryId === cat.id);
+        return {
+          ...cat,
+          total: summary ? summary.total : 0,
+        };
+      });
+  }, [allCategories, monthlyCategorySummaries]);
 
   const total = income + Math.abs(expenses);
   const containerVariants = {
@@ -162,11 +191,8 @@ const DashboardPage = () => {
             const x = radius * Math.cos(angle);
             const y = radius * Math.sin(angle);
 
-            // חילוץ שם הצבע מתוך הקלאס (למשל text-red-500 -> red)
-            // הנחה: הקלאס הוא משהו כמו 'text-red-500'
             const colorClass = category.color || 'text-primary';
-            const bgColorClass = colorClass.replace('text-', 'bg-').split('-')[0] + '-' + colorClass.split('-')[1] + '-100'; 
-            // התוצאה: אם היה text-red-500 נקבל bg-red-100 (רקע בהיר)
+            const safeColor = colorMap[colorClass] || { text: colorClass, bg: 'bg-primary/10' };
 
             return (
               <div
@@ -187,11 +213,11 @@ const DashboardPage = () => {
                     relative rounded-2xl p-3 mb-1.5 flex items-center justify-center 
                     shadow-sm group-hover:shadow-md border border-white/50 dark:border-white/10
                     transition-all duration-300 backdrop-blur-md
-                    ${colorClass.replace('text-', 'bg-')}/10  /* רקע שקוף מאוד בצבע הקטגוריה */
+                    ${safeColor.bg} 
                   `}
                 >
                     <IconComponent 
-                        className={`h-5 w-5 ${colorClass} drop-shadow-sm`} 
+                        className={`h-5 w-5 ${safeColor.text} drop-shadow-sm`} 
                     />
                 </div>
                 

@@ -20,9 +20,8 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const [familyId, setFamilyId] = useState(null);
     const [userData, setUserData] = useState(null);
-    const [familyMembers, setFamilyMembers] = useState([]); // <--- רשימת חברי המשפחה
+    const [familyMembers, setFamilyMembers] = useState([]);
 
-    // הרשמה למערכת
     const signup = async (email, password, name) => {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
@@ -60,7 +59,6 @@ export const AuthProvider = ({ children }) => {
         return signOut(auth);
     };
 
-    // הצטרפות למשפחה
     const joinFamily = async (targetFamilyId) => {
         if (!currentUser) return;
         
@@ -77,20 +75,19 @@ export const AuthProvider = ({ children }) => {
             members: arrayUnion(currentUser.uid)
         });
 
+        // עדכון הסטייט המקומי במקום לרענן את הדף
         setFamilyId(targetFamilyId);
-        window.location.reload();
+        setUserData(prev => prev ? { ...prev, familyId: targetFamilyId } : prev);
+        // React עכשיו תדאג לעדכן את כל הקומפוננטות ולמשוך את הנתונים החדשים!
     };
 
-    // עדכון פרופיל (נשתמש בזה בשלב 2, אבל אני מכין את זה כבר)
     const updateUserProfile = async (newName) => {
         if (!currentUser) return;
         await updateDoc(doc(db, "users", currentUser.uid), { name: newName });
         setUserData(prev => ({ ...prev, name: newName }));
-        // רענון הרשימה כדי לראות את השינוי מיד
         fetchFamilyMembers(familyId);
     };
 
-    // פונקציה לשליפת חברי המשפחה
     const fetchFamilyMembers = async (currentFamilyId) => {
         if (!currentFamilyId) return;
         try {
@@ -109,7 +106,6 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // טעינת משתמש ראשונית
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
@@ -144,7 +140,6 @@ export const AuthProvider = ({ children }) => {
         return unsubscribe;
     }, []);
 
-    // האזנה לשינויים ב-familyId כדי לטעון את רשימת החברים
     useEffect(() => {
         if (familyId) {
             fetchFamilyMembers(familyId);
@@ -155,12 +150,12 @@ export const AuthProvider = ({ children }) => {
         currentUser,
         familyId,
         userData,
-        familyMembers, // <--- החשיפה החדשה
+        familyMembers,
         signup,
         login,
         logout,
         joinFamily,
-        updateUserProfile // <--- הפונקציה החדשה לשלב הבא
+        updateUserProfile
     };
 
     return (
