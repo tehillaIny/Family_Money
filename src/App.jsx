@@ -8,8 +8,8 @@ import TransactionsPage from './pages/TransactionsPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import AddTransactionMobilePage from './pages/AddTransactionMobilePage';
-import ReviewPage from './pages/ReviewPage'; // דף סקירה
-import ChartsPage from './pages/ChartsPage'; // דף גרפים
+import ReviewPage from './pages/ReviewPage';
+import ChartsPage from './pages/ChartsPage';
 import { Toaster } from "@/components/ui/toaster";
 
 const AuthenticatedApp = () => {

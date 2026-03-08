@@ -6,8 +6,8 @@ import { motion } from 'framer-motion';
 import { useData } from '@/hooks/useData.jsx';
 import Header from '@/components/shared/Header.jsx';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { formatCurrency } from '../lib/utils';
 
-// מילון צבעים בטוח מ-Tailwind Purge (מהתיקון הקודם שלנו)
 const colorMap = {
   'text-blue-500': { text: 'text-blue-500', bg: 'bg-blue-500/10' },
   'text-purple-500': { text: 'text-purple-500', bg: 'bg-purple-500/10' },
@@ -33,11 +33,10 @@ const DashboardPage = () => {
     getCategorySummariesForMonth,
     categories: allCategories,
     getIconComponent,
-    transactions, // הוספנו את זה כדי לדעת מתי עסקאות משתנות
-    currentDate   // הוספנו את זה כדי לדעת מתי החודש משתנה
+    transactions,
+    currentDate 
   } = useData();
 
-  // התיקון: עוטפים את החישובים הכבדים ב-useMemo
   const { income, expenses } = useMemo(() => {
     return getBalanceForMonth();
   }, [transactions, currentDate, getBalanceForMonth]);
@@ -77,7 +76,7 @@ const DashboardPage = () => {
     navigate('/add-transaction', { state: { type: 'income' } });
   };
 
-  const formatMoney = (amount) => {
+  const formatCurrency = (amount) => {
     return amount.toLocaleString('he-IL', { 
         style: 'currency', 
         currency: 'ILS', 
@@ -99,7 +98,6 @@ const DashboardPage = () => {
              <MonthNavigator />
         </div>
 
-        {/* אפקט זוהר מרכזי */}
         <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl -z-10 pointer-events-none" />
 
         <motion.div
@@ -155,7 +153,6 @@ const DashboardPage = () => {
             </PieChart>
           </ResponsiveContainer>
 
-          {/* מרכז העיגול - נקי וברור */}
           <div
             onClick={handleAddIncomeClick}
             role="button"
@@ -166,23 +163,23 @@ const DashboardPage = () => {
             <div className="flex flex-col items-center justify-center h-full select-none text-center space-y-1">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הכנסות</span>
               <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-tight">
-                {formatMoney(income)}
+                {formatCurrency(income)}
               </span>
               
               <div className="w-8 h-[2px] bg-border/60 my-1 rounded-full"></div>
 
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הוצאות</span>
               <span className="text-lg font-bold text-rose-500 dark:text-rose-400 font-sans tracking-tight">
-                {formatMoney(Math.abs(expenses))}
+                {formatCurrency(Math.abs(expenses))}
               </span>
               
               <div className="mt-2 text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-                 יתרה: {formatMoney(income - expenses)}
+                 יתרה: {formatCurrency(income - expenses)}
               </div>
             </div>
           </div>
 
-          {/* קטגוריות מסביב לעיגול - צבעוניות */}
+          {/* קטגוריות מסביב לעיגול */}
           {dashboardDisplayCategories.map((category, index) => {
             const IconComponent = getIconComponent(category.iconName) || DollarSign;
             const totalCategories = dashboardDisplayCategories.length;
@@ -207,7 +204,6 @@ const DashboardPage = () => {
                   zIndex: 20,
                 }}
               >
-                {/* הבועה הצבעונית */}
                 <div 
                   className={`
                     relative rounded-2xl p-3 mb-1.5 flex items-center justify-center 
@@ -227,7 +223,7 @@ const DashboardPage = () => {
                     {category.name_he}
                     </span>
                     <span className="text-xs font-bold text-foreground font-sans">
-                    {formatMoney(category.total)}
+                    {formatCurrency(category.total)}
                     </span>
                 </div>
               </div>

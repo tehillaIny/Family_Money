@@ -5,14 +5,14 @@ import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { 
   PlusCircle, Edit3, Trash2, TrendingUp, TrendingDown, 
-  DollarSign, Tag, Repeat, X, User // <-- הוספתי את User
+  DollarSign, Tag, Repeat, X, User
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useData } from '@/hooks/useData.jsx';
 import Header from '@/components/shared/Header.jsx';
 import RecurringTransactionDialog from '@/components/shared/RecurringTransactionDialog.jsx';
-import { formatDate } from '@/lib/utils.js';
 import { Input } from '@/components/ui/input.jsx';
+import { formatCurrency, formatDateHe } from '@/lib/utils.js';
 
 const TransactionsPage = () => {
   const navigate = useNavigate();
@@ -207,14 +207,12 @@ const TransactionsPage = () => {
                     <Card className={`clean-card hover:shadow-md transition-all duration-200 border-none shadow-sm ${isFuture ? 'opacity-70 bg-muted/30' : ''}`}>
                       <CardContent className="p-3 sm:p-4 flex items-center justify-between">
                         
-                        {/* צד ימין: אייקון ופרטים */}
                         <div className="flex items-center space-x-3 rtl:space-x-reverse min-w-0 flex-1">
                           <div className={`p-3 rounded-2xl ${iconBgColor} shrink-0`}>
                             <IconComponent className={`h-5 w-5 ${iconColorClass}`} />
                           </div>
                           
                           <div className="flex-1 min-w-0 pr-2">
-                            {/* שורה עליונה: שם קטגוריה ואייקון חזרתיות */}
                             <div className="flex items-center gap-2 mb-0.5">
                               <p className="font-semibold text-base text-foreground truncate">
                                 {categoryName}
@@ -224,10 +222,8 @@ const TransactionsPage = () => {
                               )}
                             </div>
 
-                            {/* שורה תחתונה: מטא-דאטה (תאריך, תיאור, יוצר) */}
                             <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span>{formatDate(transaction.date)}</span>
-
+                              <span>{formatDateHe(transaction.date)}</span>
                               {transaction.description && (
                                 <>
                                   <span className="text-muted-foreground/40">•</span>
@@ -235,7 +231,6 @@ const TransactionsPage = () => {
                                 </>
                               )}
 
-                              {/* --- כאן השינוי: הצגת שם היוצר --- */}
                               {transaction.creatorName && (
                                 <div className="flex items-center gap-1 bg-secondary/50 px-1.5 py-0.5 rounded text-[10px] text-secondary-foreground font-medium select-none">
                                     <User className="h-3 w-3" />
@@ -262,12 +257,11 @@ const TransactionsPage = () => {
                           </div>
                         </div>
 
-                        {/* צד שמאל: סכום ופעולות */}
                         <div className="flex items-center gap-3 rtl:mr-2">
                           <p className={`text-lg font-bold whitespace-nowrap ${amountColor}`} dir="ltr">
-                            {transaction.type === 'income' ? '+' : '-'}{Math.abs(transaction.amount).toLocaleString('he-IL', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            {formatCurrency(transaction.amount)}
                           </p>
-                          
+
                           <div className="flex flex-col gap-1 sm:flex-row sm:gap-0">
                             <Button variant="ghost" size="icon" onClick={() => handleEdit(transaction)} className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
                               <Edit3 className="h-4 w-4" />
