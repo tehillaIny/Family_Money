@@ -1,6 +1,5 @@
-// src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
@@ -13,16 +12,17 @@ const firebaseConfig = {
   measurementId: "G-MC0MD47NQ5"
 };
 
-let app, db, auth;
+const app = initializeApp(firebaseConfig);
 
-try {
-  app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-  console.log('✅ Firebase initialized successfully');
-} catch (error) {
-  console.error('❌ Error initializing Firebase:', error);
-  throw error;
-}
+// הדרך המודרנית (ללא קו חוצה) שמפעילה אופליין בצורה בטוחה
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
+const auth = getAuth(app);
+
+console.log('✅ Firebase initialized with modern offline support');
 
 export { app, db, auth };

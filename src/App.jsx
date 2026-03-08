@@ -1,64 +1,47 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from '@/components/ui/toaster';
-import { DataProvider } from '@/contexts/DataContext.jsx';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext.jsx'; // ייבוא ה-Context החדש
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { DataProvider } from './contexts/DataContext';
+import Layout from './components/Layout';
+import DashboardPage from './pages/DashboardPage';
+import TransactionsPage from './pages/TransactionsPage';
+import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
+import AddTransactionMobilePage from './pages/AddTransactionMobilePage';
+import ReviewPage from './pages/ReviewPage'; // דף סקירה
+import ChartsPage from './pages/ChartsPage'; // דף גרפים
+import { Toaster } from "@/components/ui/toaster";
 
-import DashboardPage from '@/pages/DashboardPage.jsx';
-import TransactionsPage from '@/pages/TransactionsPage.jsx';
-import ReviewPage from '@/pages/ReviewPage.jsx';
-import AddTransactionMobilePage from '@/pages/AddTransactionMobilePage.jsx';
-import SettingsPage from '@/pages/SettingsPage.jsx';
-import ChartsPage from './pages/ChartsPage';
-import SideMenu from './components/shared/SideMenu';
-import BottomNavBar from './components/shared/BottomNavBar';
-import LoginPage from '@/pages/LoginPage.jsx'; // דף ההתחברות החדש
-
-// רכיב "שומר סף" - בודק אם המשתמש מחובר
-const PrivateRoute = ({ children }) => {
+const AuthenticatedApp = () => {
   const { currentUser } = useAuth();
-  // אם יש משתמש - מציג את התוכן. אם לא - זורק לדף לוגין
-  return currentUser ? children : <Navigate to="/login" replace />;
+
+  return (
+    <Routes>
+      <Route path="/login" element={!currentUser ? <LoginPage /> : <Navigate to="/" />} />
+      
+      <Route path="/" element={currentUser ? <Layout /> : <Navigate to="/login" />}>
+        <Route index element={<DashboardPage />} />
+        <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="add-transaction" element={<AddTransactionMobilePage />} />
+        
+        {/* שני דפים נפרדים לגמרי */}
+        <Route path="review" element={<ReviewPage />} />
+        <Route path="charts" element={<ChartsPage />} />
+        
+        <Route path="settings" element={<SettingsPage />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
+  );
 };
 
 function App() {
   return (
-    // עוטפים את הכל ב-AuthProvider כדי שנוכל לדעת מי המשתמש
     <AuthProvider>
       <DataProvider>
         <Router>
-          <div className="min-h-screen bg-background">
-            <Routes>
-              {/* --- נתיב ציבורי (פתוח לכולם): דף התחברות --- */}
-              <Route path="/login" element={<LoginPage />} />
-
-              {/* --- נתיבים פרטיים (רק למחוברים) --- */}
-              {/* כל נתיב אחר (*) ייכנס לכאן ויעבור בדיקה */}
-              <Route
-                path="/*"
-                element={
-                  <PrivateRoute>
-                    {/* המבנה הפנימי של האפליקציה - מופיע רק למחוברים */}
-                    <>
-                      <SideMenu />
-                      <main className="pb-16">
-                        <Routes>
-                          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                          <Route path="/dashboard" element={<DashboardPage />} />
-                          <Route path="/transactions" element={<TransactionsPage />} />
-                          <Route path="/review" element={<ReviewPage />} />
-                          <Route path="/add-transaction" element={<AddTransactionMobilePage />} />
-                          <Route path="/settings" element={<SettingsPage />} />
-                          <Route path="/charts" element={<ChartsPage />} />
-                        </Routes>
-                      </main>
-                      <BottomNavBar />
-                    </>
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
-          </div>
+          <AuthenticatedApp />
           <Toaster />
         </Router>
       </DataProvider>

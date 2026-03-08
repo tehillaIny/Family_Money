@@ -1,18 +1,22 @@
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import BottomNavBar from './shared/BottomNavBar';
+import SideMenu from './shared/SideMenu';
 
-    import React from 'react';
-    import BottomNavBar from '@/components/shared/BottomNavBar.jsx';
+const Layout = () => {
+  return (
+    <div className="min-h-screen flex flex-col bg-background text-foreground font-sans">
+      <SideMenu />
+      
+      <main className="flex-grow container mx-auto px-4 pt-4 pb-32">
+        <Outlet />
+      </main>
 
-    const Layout = ({ children }) => {
-      return (
-        <div className="min-h-screen flex flex-col bg-background text-foreground">
-          <main className="flex-grow container mx-auto px-4 py-6 pb-20 sm:pb-6">
-            {children}
-          </main>
-          <BottomNavBar />
-          {/* Removed the old footer, can add a new one if needed */}
-        </div>
-      );
-    };
+      <div className="fixed bottom-0 left-0 right-0 z-50">
+        <BottomNavBar />
+      </div>
+    </div>
+  );
+};
 
-    export default Layout;
-  
+export default Layout;
