@@ -1,75 +1,17 @@
 import React, { createContext, useState, useEffect } from 'react';
-import {
-  Car, Briefcase as BriefcaseSimple, ShoppingBag, Gift, Building as BuildingApartment,
-  GraduationCap, FolderHeart as HandHeart, Shirt, Gamepad as GameController,
-  Popcorn, Bed, CreditCard, Bug as Question, ShoppingBasket as Basket,
-  Coins, PiggyBank, DollarSign
-} from 'lucide-react';
-
 import { db } from '../firebase';
 import {
   collection, getDocs, setDoc, deleteDoc, doc, writeBatch
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
+import { defaultCategories, iconMap, getIconComponent } from '../constants/categories';
+import { toLocalISOString } from '../lib/utils';
 
 const DataContext = createContext();
 
-// --- Icons & Categories Setup ---
-
-const iconMap = {
-  Car, BriefcaseSimple, ShoppingBag, Gift, BuildingApartment,
-  GraduationCap, HandHeart, Shirt, GameController, Popcorn,
-  Bed, CreditCard, Question, Basket, Coins, PiggyBank, DollarSign
-};
-
-const getIconComponent = (iconName) => {
-  return iconMap[iconName] || DollarSign;
-};
-
-const defaultCategories = [
-  { id: 'cat_car', name_en: 'Car', name_he: 'רכב', iconName: 'Car', color: 'text-blue-500', colorHex: '#3b82f6', type: 'expense', showOnDashboard: true },
-  { id: 'cat_transport', name_en: 'Transportation', name_he: 'תחבורה', iconName: 'BriefcaseSimple', color: 'text-purple-500', colorHex: '#8b5cf6', type: 'expense', showOnDashboard: true },
-  { id: 'cat_leisure', name_en: 'Leisure', name_he: 'פנאי', iconName: 'GameController', color: 'text-pink-500', colorHex: '#ec4899', type: 'expense', showOnDashboard: true },
-  { id: 'cat_restaurant', name_en: 'Restaurant', name_he: 'מסעדה', iconName: 'Popcorn', color: 'text-orange-500', colorHex: '#f97316', type: 'expense', showOnDashboard: true },
-  { id: 'cat_shopping', name_en: 'Shopping', name_he: 'קניות', iconName: 'ShoppingBag', color: 'text-yellow-500', colorHex: '#eab308', type: 'expense', showOnDashboard: true },
-  { id: 'cat_gifts', name_en: 'Gifts', name_he: 'מתנות', iconName: 'Gift', color: 'text-red-500', colorHex: '#ef4444', type: 'expense', showOnDashboard: true },
-  { id: 'cat_rent', name_en: 'Rent', name_he: 'שכר דירה', iconName: 'BuildingApartment', color: 'text-teal-500', colorHex: '#14b8a6', type: 'expense', showOnDashboard: true },
-  { id: 'cat_studies', name_en: 'Studies', name_he: 'לימודים', iconName: 'GraduationCap', color: 'text-cyan-500', colorHex: '#06b6d4', type: 'expense', showOnDashboard: false },
-  { id: 'cat_donations', name_en: 'Donations', name_he: 'תרומות', iconName: 'HandHeart', color: 'text-lime-500', colorHex: '#84cc16', type: 'expense', showOnDashboard: false },
-  { id: 'cat_clothing', name_en: 'Clothing', name_he: 'ביגוד', iconName: 'Shirt', color: 'text-fuchsia-500', colorHex: '#d946ef', type: 'expense', showOnDashboard: true },
-  { id: 'cat_bills', name_en: 'Bills', name_he: 'חשבונות', iconName: 'CreditCard', color: 'text-sky-500', colorHex: '#0ea5e9', type: 'expense', showOnDashboard: true },
-  { id: 'cat_groceries', name_en: 'Groceries', name_he: 'סופרמרקט', iconName: 'Basket', color: 'text-green-500', colorHex: '#22c55e', type: 'expense', showOnDashboard: true },
-  { id: 'cat_other_expense', name_en: 'Other Expense', name_he: 'אחר', iconName: 'Question', color: 'text-gray-500', colorHex: '#6b7280', type: 'expense', showOnDashboard: false },
-  { id: 'cat_salary', name_en: 'Salary', name_he: 'משכורת', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
-  { id: 'cat_Pocket_Money', name_en: 'PocketMoney', name_he: 'דמי כיס', iconName: 'PiggyBank', color: 'text-indigo-500', colorHex: '#6366f1', type: 'income', showOnDashboard: false },
-  { id: 'cat_Grant', name_en: 'Grant', name_he: 'מענק', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
-  { id: 'cat_Presents', name_en: 'Presents', name_he: 'מתנה', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
-  { id: 'cat_other_income', name_en: 'income-else', name_he: 'אחר', iconName: 'Coins', color: 'text-emerald-500', colorHex: '#10b981', type: 'income', showOnDashboard: false },
-];
-
-// יצירת מזהה ייחודי ובטוח ב-100% באמצעות המנגנון המובנה של פיירבייס
 const generateId = () => doc(collection(db, 'transactions')).id;
 
-// --- DATE UTILS ---
-const formatToLocalIso = (dateInput) => {
-    if (!dateInput) return '';
-    
-    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-        return dateInput;
-    }
-
-    const d = new Date(dateInput);
-    d.setHours(12, 0, 0, 0); 
-    
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
-};
-
 // --- Provider ---
-
 export const DataProvider = ({ children }) => {
   const [initialized, setInitialized] = useState(false);
   
@@ -217,7 +159,7 @@ export const DataProvider = ({ children }) => {
 
         while (nextInstanceDate <= endByDate && count < maxCount) {
           
-          const isoDate = formatToLocalIso(nextInstanceDate);
+          const isoDate = toLocalISOString(nextInstanceDate);
           
           const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
           const alreadyExists = transactions.some(
@@ -246,7 +188,6 @@ export const DataProvider = ({ children }) => {
     };
 
     generateFutureRecurringTransactions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialized, transactions.length, deletedTransactions, currentDate]); 
 
   // --- 3. CRUD Operations ---
@@ -255,7 +196,7 @@ export const DataProvider = ({ children }) => {
     const id = transaction.id || generateId();
     const createdAt = transaction.createdAt || Date.now();
     
-    const safeDate = formatToLocalIso(transaction.date);
+    const safeDate = toLocalISOString(transaction.date);
     
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
@@ -282,7 +223,7 @@ export const DataProvider = ({ children }) => {
       ...t,
       id: t.id || generateId(),
       createdAt: t.createdAt || Date.now(),
-      date: formatToLocalIso(t.date)
+      date: toLocalISOString(t.date)
     }));
     
     setTransactions(prev => [...prev, ...newTransactions]);
@@ -298,7 +239,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateTransaction = async (updatedTransaction) => {
-    const safeDate = formatToLocalIso(updatedTransaction.date);
+    const safeDate = toLocalISOString(updatedTransaction.date);
     
     const payload = { 
         ...updatedTransaction, 
@@ -321,7 +262,6 @@ export const DataProvider = ({ children }) => {
   };
 
   // --- 4. Special Recurrence Handlers ---
-
   const deleteSingleTransaction = async (transactionId) => {
     const transactionToDelete = transactions.find(t => t.id === transactionId);
     if (!transactionToDelete) return;
@@ -355,12 +295,12 @@ export const DataProvider = ({ children }) => {
         const updatedOriginal = {
             ...originalTransaction,
             recurrenceEndType: 'date',
-            recurrenceEndDate: formatToLocalIso(endDateForOldSeries)
+            recurrenceEndDate: toLocalISOString(endDateForOldSeries)
         };
         await updateTransaction(updatedOriginal);
     }
 
-    const terminationIso = formatToLocalIso(terminationDate);
+    const terminationIso = toLocalISOString(terminationDate);
     
     const transactionsToDelete = transactions.filter(t => {
         const isPartOfSeries = t.id === originalId || t.originalId === originalId;
@@ -413,7 +353,7 @@ export const DataProvider = ({ children }) => {
         ...updates,             
         id: generateId(),
         originalId: null,       
-        date: formatToLocalIso(splitDate),
+        date: toLocalISOString(splitDate),
         createdAt: Date.now(),
         recurring: true,
         recurrenceEndType: updates.recurrenceEndType || originalTransaction.recurrenceEndType,
@@ -460,7 +400,7 @@ export const DataProvider = ({ children }) => {
 
         const parentDocRef = doc(db, 'users', userId, 'transactions', originalId);
         const updatedParent = { ...seriesTransactions.find(t => t.id === originalId), ...updates };
-        if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
+        if (updates.date) updatedParent.date = toLocalISOString(updates.date);
         
         batch.set(parentDocRef, updatedParent, { merge: true });
         
@@ -476,7 +416,7 @@ export const DataProvider = ({ children }) => {
     setTransactions(prev => {
         const parent = prev.find(t => t.id === originalId);
         const updatedParent = { ...parent, ...updates };
-        if (updates.date) updatedParent.date = formatToLocalIso(updates.date);
+        if (updates.date) updatedParent.date = toLocalISOString(updates.date);
 
         const otherTransactions = prev.filter(t => t.id !== originalId && t.originalId !== originalId);
         return [...otherTransactions, updatedParent];
@@ -484,7 +424,6 @@ export const DataProvider = ({ children }) => {
   };
 
   // --- 5. Data Getters ---
-
   const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -527,10 +466,8 @@ export const DataProvider = ({ children }) => {
 
   const getIncomeSummariesForMonth = (date = currentDate) => getCategorySummariesForMonth(date, 'income');
 
-  // --- 6. Categories CRUD ---
-  
+  // --- 6. Categories CRUD ---  
   const addCategory = async (newCategory) => {
-    // השתמשנו במזהה הבטוח גם לקטגוריות
     const id = 'cat_' + doc(collection(db, 'categories')).id;
     const category = { ...newCategory, id };
     const { icon, ...categoryToSave } = category;
