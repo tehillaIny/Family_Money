@@ -46,35 +46,43 @@ const AddTransactionMobilePage = () => {
   const { toast } = useToast();
 
   const transactionToEdit = location.state?.transactionToEdit;
+  const transactionToDuplicate = location.state?.transactionToDuplicate; // <-- הוספנו את המשתנה החדש!
+  
+  // מקור הנתונים שלנו: אם יש עריכה נשתמש בה, אם יש שכפול נשתמש בו
+  const sourceData = transactionToEdit || transactionToDuplicate;
+
   const editMode = location.state?.editMode;
   const preselectedCategoryId = location.state?.preselectedCategoryId;
   const preselectedType = location.state?.type;
   const currentMonthDateFromNav = location.state?.currentMonthDate ? new Date(location.state.currentMonthDate) : new Date(contextCurrentDate);
 
-  const [amountStr, setAmountStr] = useState(transactionToEdit ? String(Math.abs(transactionToEdit.amount)) : '0');
-  const [description, setDescription] = useState(transactionToEdit ? transactionToEdit.description || '' : '');
-  const [selectedDate, setSelectedDate] = useState(transactionToEdit ? new Date(transactionToEdit.date) : currentMonthDateFromNav);
-  const [type, setType] = useState(transactionToEdit ? transactionToEdit.type : preselectedType || 'expense');
-  const [selectedCategoryId, setSelectedCategoryId] = useState(transactionToEdit ? transactionToEdit.categoryId : preselectedCategoryId || '');
-  const [tagsStr, setTagsStr] = useState(transactionToEdit?.tags?.join(', ') || '');
+  // משיכת נתוני הבסיס (סכום, קטגוריה, סוג, תגיות) מתוך מקור הנתונים (עריכה או שכפול)
+  const [amountStr, setAmountStr] = useState(sourceData ? String(Math.abs(sourceData.amount)) : '0');
+  const [description, setDescription] = useState(sourceData ? sourceData.description || '' : '');
+  const [type, setType] = useState(sourceData ? sourceData.type : preselectedType || 'expense');
+  const [selectedCategoryId, setSelectedCategoryId] = useState(sourceData ? sourceData.categoryId : preselectedCategoryId || '');
+  const [tagsStr, setTagsStr] = useState(sourceData?.tags?.join(', ') || '');
 
-  const [isRecurring, setIsRecurring] = useState(transactionToEdit?.recurring || false);
-  const [recurrenceFrequency, setRecurrenceFrequency] = useState(transactionToEdit?.recurrenceFrequency || 'monthly');
-  const [recurrenceDay, setRecurrenceDay] = useState(transactionToEdit?.recurrenceDay || selectedDate.getDate());
-  const [recurrenceEndType, setRecurrenceEndType] = useState(transactionToEdit?.recurrenceEndType || 'count');
-  const [recurrenceEndDate, setRecurrenceEndDate] = useState(transactionToEdit?.recurrenceEndDate ? new Date(transactionToEdit.recurrenceEndDate) : new Date());
-  const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(transactionToEdit?.recurrenceOccurrences || 12);
+  // תאריך: אם זו *עריכה* ניקח את התאריך המקורי. אם זה *שכפול* (או עסקה חדשה), ניקח את התאריך של היום/החודש הנבחר!
+  const [selectedDate, setSelectedDate] = useState(transactionToEdit ? new Date(transactionToEdit.date) : currentMonthDateFromNav);
+
+  const [isRecurring, setIsRecurring] = useState(sourceData?.recurring || false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState(sourceData?.recurrenceFrequency || 'monthly');
+  const [recurrenceDay, setRecurrenceDay] = useState(sourceData?.recurrenceDay || selectedDate.getDate());
+  const [recurrenceEndType, setRecurrenceEndType] = useState(sourceData?.recurrenceEndType || 'count');
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(sourceData?.recurrenceEndDate ? new Date(sourceData.recurrenceEndDate) : new Date());
+  const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(sourceData?.recurrenceOccurrences || 12);
 
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const calendarConfirmRef = useRef();
 
   useEffect(() => {
-    if (!transactionToEdit && preselectedCategoryId) {
+    if (!sourceData && preselectedCategoryId) {
       setSelectedCategoryId(preselectedCategoryId);
       const cat = getCategoryById(preselectedCategoryId);
       if (cat?.type) setType(cat.type);
     }
-  }, [preselectedCategoryId, transactionToEdit, getCategoryById]);
+  }, [preselectedCategoryId, sourceData, getCategoryById]);
 
   const handleNumpadInput = (value) => {
     if (value === '.' && amountStr.includes('.')) return;
@@ -99,29 +107,22 @@ const AddTransactionMobilePage = () => {
     }
 
     const tagsArray = tagsStr.split(',').map(tag => tag.trim()).filter(Boolean);
-    
-    // --- התיקון כאן: שימוש ב-format במקום toISOString ---
-    // זה מבטיח שהתאריך יישמר בדיוק כמו שבחרת אותו (זמן מקומי)
     const formattedDate = format(selectedDate, 'yyyy-MM-dd');
-    
-    // אותו דבר לתאריך סיום חזרתיות
-    const formattedRecurrenceEndDate = recurrenceEndDate 
-        ? format(recurrenceEndDate, 'yyyy-MM-dd') 
-        : null;
+    const formattedRecurrenceEndDate = recurrenceEndDate ? format(recurrenceEndDate, 'yyyy-MM-dd') : null;
 
     const transactionData = {
-      id: transactionToEdit?.id,
+      id: transactionToEdit?.id, // אם זה שכפול, לא יהיה פה ID וזה ייצור עסקה חדשה לגמרי!
       type,
       amount: finalAmount,
       categoryId: selectedCategoryId,
-      date: formattedDate, // <--- כאן היה השינוי
+      date: formattedDate,
       description,
       tags: tagsArray,
       recurring: isRecurring,
       recurrenceFrequency,
       recurrenceDay,
       recurrenceEndType,
-      recurrenceEndDate: recurrenceEndType === 'date' ? formattedRecurrenceEndDate : null, // <--- וגם כאן
+      recurrenceEndDate: recurrenceEndType === 'date' ? formattedRecurrenceEndDate : null,
       recurrenceOccurrences: recurrenceEndType === 'count' ? recurrenceOccurrences : null,
     };
 
@@ -146,7 +147,7 @@ const AddTransactionMobilePage = () => {
       toast({ title: "הצלחה!", description: "העסקה עודכנה." });
     } else {
       addTransaction(transactionData);
-      toast({ title: "הצלחה!", description: "העסקה נוספה." });
+      toast({ title: "הצלחה!", description: transactionToDuplicate ? "העסקה שוכפלה בהצלחה!" : "העסקה נוספה." });
     }
 
     navigate(-1);
@@ -162,7 +163,9 @@ const AddTransactionMobilePage = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-6 w-6" />
         </Button>
-        <h1 className="text-xl font-semibold">{transactionToEdit ? 'עריכת עסקה' : 'הוספת עסקה חדשה'}</h1>
+        <h1 className="text-xl font-semibold">
+          {transactionToEdit ? 'עריכת עסקה' : (transactionToDuplicate ? 'שכפול עסקה' : 'הוספת עסקה חדשה')}
+        </h1>
         <Button variant="ghost" size="icon" onClick={handleSubmit}>
           <CheckCircle className="h-6 w-6 text-primary" />
         </Button>

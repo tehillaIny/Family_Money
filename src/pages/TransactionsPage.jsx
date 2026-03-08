@@ -7,21 +7,88 @@ import {
   PlusCircle, Edit3, Trash2, TrendingUp, TrendingDown, 
   DollarSign, Tag, Repeat, X, User, Copy
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useAnimation } from 'framer-motion';
 import { useData } from '@/hooks/useData.jsx';
 import Header from '@/components/shared/Header.jsx';
 import RecurringTransactionDialog from '@/components/shared/RecurringTransactionDialog.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { formatCurrency, formatDateHe } from '@/lib/utils.js';
 
-import {
-  SwipeableList,
-  SwipeableListItem,
-  SwipeAction,
-  TrailingActions,
-  LeadingActions,
-} from 'react-swipeable-list';
-import 'react-swipeable-list/dist/styles.css';
+// --- רכיב החלקה מותאם אישית (הרקע האטום תוקן!) ---
+const SwipeableTransactionItem = ({ transaction, children, onEdit, onDuplicate, onDelete }) => {
+  const controls = useAnimation();
+
+  const handleDragEnd = (event, info) => {
+    const offset = info.offset.x;
+    const velocity = info.velocity.x;
+
+    // אם גררנו שמאלה (כדי למחוק)
+    if (offset < -40 || velocity < -500) {
+      controls.start({ x: -80 }); // נועל את הכרטיס במצב פתוח
+    } 
+    // אם גררנו ימינה (כדי לערוך/לשכפל)
+    else if (offset > 40 || velocity > 500) {
+      controls.start({ x: 160 }); // נועל במצב פתוח (160 זה רוחב של שני כפתורים)
+    } 
+    // אם לא גררנו מספיק חזק - מחזיר למרכז
+    else {
+      controls.start({ x: 0 });
+    }
+  };
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-xl mb-3 shadow-sm border border-border/40 bg-secondary/20">
+      
+      {/* הרקע התחתון שמכיל את הכפתורים */}
+      <div className="absolute inset-0 flex justify-between items-center z-0">
+        
+        {/* כפתורי ימין פיזי (מופיעים כשמושכים ימינה) -> עריכה ושכפול */}
+        <div className="absolute left-0 top-0 bottom-0 flex h-full">
+          <button 
+            onClick={() => { controls.start({ x: 0 }); onDuplicate(transaction); }} 
+            className="flex flex-col justify-center items-center w-20 bg-indigo-500 text-white hover:bg-indigo-600 transition-colors border-r border-indigo-400/30"
+          >
+            <Copy className="h-5 w-5 mb-1" />
+            <span className="font-semibold text-[11px]">שכפל</span>
+          </button>
+          <button 
+            onClick={() => { controls.start({ x: 0 }); onEdit(transaction); }} 
+            className="flex flex-col justify-center items-center w-20 bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+          >
+            <Edit3 className="h-5 w-5 mb-1" />
+            <span className="font-semibold text-[11px]">ערוך</span>
+          </button>
+        </div>
+
+        {/* כפתור שמאל פיזי (מופיע כשמושכים שמאלה) -> מחיקה */}
+        <div className="absolute right-0 top-0 bottom-0 flex h-full">
+          <button 
+            onClick={() => { controls.start({ x: 0 }); onDelete(transaction); }} 
+            className="flex flex-col justify-center items-center w-20 bg-red-500 text-white hover:bg-red-600 transition-colors"
+          >
+            <Trash2 className="h-5 w-5 mb-1" />
+            <span className="font-semibold text-[11px]">מחק</span>
+          </button>
+        </div>
+      </div>
+
+      {/* הכרטיסיה עצמה שצפה מעל הכפתורים */}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -80, right: 160 }}
+        dragElastic={0.1}
+        dragDirectionLock
+        onDragEnd={handleDragEnd}
+        animate={controls}
+        // הוספנו כאן את bg-card כדי לחסום את השקיפות!
+        className="relative z-10 w-full touch-pan-y bg-card rounded-xl"
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
+};
+
 
 const TransactionsPage = () => {
   const navigate = useNavigate();
@@ -127,31 +194,6 @@ const TransactionsPage = () => {
     visible: { x: 0, opacity: 1 },
   };
 
-  const leadingActions = (transaction) => (
-    <LeadingActions>
-      <SwipeAction onClick={() => handleEdit(transaction)}>
-        <div className="flex h-full w-full items-center justify-start bg-blue-500 pl-6 pr-4 text-white rounded-l-lg mb-3 shadow-sm border border-transparent">
-          <Edit3 className="mr-2 h-6 w-6" /> <span className="font-semibold text-sm">ערוך</span>
-        </div>
-      </SwipeAction>
-      <SwipeAction onClick={() => handleDuplicate(transaction)}>
-        <div className="flex h-full w-full items-center justify-start bg-indigo-500 pl-6 pr-4 text-white rounded-l-lg mb-3 shadow-sm border border-transparent">
-          <Copy className="mr-2 h-6 w-6" /> <span className="font-semibold text-sm">שכפל</span>
-        </div>
-      </SwipeAction>
-    </LeadingActions>
-  );
-
-  const trailingActions = (transaction) => (
-    <TrailingActions>
-      <SwipeAction destructive={true} onClick={() => handleDelete(transaction)}>
-        <div className="flex h-full w-full items-center justify-end bg-red-500 pr-6 pl-4 text-white rounded-r-lg mb-3 shadow-sm border border-transparent">
-          <span className="font-semibold text-sm ml-2">מחק</span> <Trash2 className="h-6 w-6" />
-        </div>
-      </SwipeAction>
-    </TrailingActions>
-  );
-
   return (
     <>
       <Header />
@@ -199,7 +241,7 @@ const TransactionsPage = () => {
 
         {transactions.length === 0 ? (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <Card className="clean-card border-dashed">
+            <Card className="clean-card border-dashed bg-transparent">
               <CardContent className="pt-10 pb-10 flex flex-col items-center justify-center text-center">
                 <div className="bg-muted p-4 rounded-full mb-4">
                     <DollarSign className="h-8 w-8 text-muted-foreground/50" />
@@ -213,123 +255,122 @@ const TransactionsPage = () => {
           </motion.div>
         ) : (
           <motion.ul variants={containerVariants} initial="hidden" animate="visible" className="space-y-3">
-            <SwipeableList threshold={0.4}>
-              {transactions.map((transaction, index) => {
-                const categoryInfo = getCategoryById(transaction.categoryId);
-                const IconComponent = transaction.type === 'income' 
-                  ? TrendingUp 
-                  : transaction.type === 'expense' 
-                    ? TrendingDown 
-                    : DollarSign;
-                const categoryName = categoryInfo ? categoryInfo.name_he : 'לא מסווג';
-                const categoryColor = categoryInfo ? categoryInfo.color : 'text-gray-500';
-                const isFuture = isFutureTransaction(transaction.date);
+            {transactions.map((transaction, index) => {
+              const categoryInfo = getCategoryById(transaction.categoryId);
+              const IconComponent = transaction.type === 'income' 
+                ? TrendingUp 
+                : transaction.type === 'expense' 
+                  ? TrendingDown 
+                  : DollarSign;
+              const categoryName = categoryInfo ? categoryInfo.name_he : 'לא מסווג';
+              const categoryColor = categoryInfo ? categoryInfo.color : 'text-gray-500';
+              const isFuture = isFutureTransaction(transaction.date);
 
-                const amountColor = transaction.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
-                const iconBgColor = transaction.type === 'income' ? 'bg-green-500/10' : `${categoryColor?.replace('text-', 'bg-')}/10`;
-                const iconColorClass = transaction.type === 'income' ? 'text-green-600 dark:text-green-400' : categoryColor || 'text-gray-500';
+              const amountColor = transaction.type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+              const iconBgColor = transaction.type === 'income' ? 'bg-green-500/10' : `${categoryColor?.replace('text-', 'bg-')}/10`;
+              const iconColorClass = transaction.type === 'income' ? 'text-green-600 dark:text-green-400' : categoryColor || 'text-gray-500';
 
-                const showSeparator = index > 0 && isFuture && !isFutureTransaction(transactions[index - 1].date);
+              const showSeparator = index > 0 && isFuture && !isFutureTransaction(transactions[index - 1].date);
 
-                return (
-                  <React.Fragment key={transaction.id}>
-                    {showSeparator && (
-                      <div className="relative my-6" data-swipeable="false">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-dashed border-gray-300 dark:border-gray-700"></div>
-                        </div>
-                        <div className="relative flex justify-center">
-                          <span className="bg-background px-3 text-xs font-medium text-muted-foreground">עסקאות עתידיות</span>
-                        </div>
+              return (
+                <React.Fragment key={transaction.id}>
+                  {showSeparator && (
+                    <div className="relative my-6" data-swipeable="false">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-dashed border-gray-300 dark:border-gray-700"></div>
                       </div>
-                    )}
-                    
-                    <motion.div variants={itemVariants} className="mb-3">
-                      <SwipeableListItem
-                        leadingActions={leadingActions(transaction)}
-                        trailingActions={trailingActions(transaction)}
-                        className="rounded-lg"
-                      >
-                        <Card className={`w-full clean-card hover:shadow-md transition-all duration-200 border-none shadow-sm ${isFuture ? 'opacity-70 bg-muted/30' : ''}`}>
-                          <CardContent className="p-3 sm:p-4 flex items-center justify-between">
+                      <div className="relative flex justify-center">
+                        <span className="bg-background px-3 text-xs font-medium text-muted-foreground">עסקאות עתידיות</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <motion.div variants={itemVariants}>
+                    <SwipeableTransactionItem 
+                      transaction={transaction}
+                      onEdit={handleEdit}
+                      onDuplicate={handleDuplicate}
+                      onDelete={handleDelete}
+                    >
+                      <Card className={`w-full clean-card border-none m-0 rounded-xl hover:shadow-md transition-all duration-200 bg-transparent ${isFuture ? 'opacity-60' : ''}`}>
+                        <CardContent className="p-3 sm:p-4 flex items-center justify-between">
+                          
+                          <div className="flex items-center space-x-3 rtl:space-x-reverse min-w-0 flex-1">
+                            <div className={`p-3 rounded-2xl ${iconBgColor} shrink-0`}>
+                              <IconComponent className={`h-5 w-5 ${iconColorClass}`} />
+                            </div>
                             
-                            <div className="flex items-center space-x-3 rtl:space-x-reverse min-w-0 flex-1">
-                              <div className={`p-3 rounded-2xl ${iconBgColor} shrink-0`}>
-                                <IconComponent className={`h-5 w-5 ${iconColorClass}`} />
+                            <div className="flex-1 min-w-0 pr-2">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className="font-semibold text-base text-foreground truncate">
+                                  {categoryName}
+                                </p>
+                                {(transaction.originalId || transaction.recurring) && (
+                                  <Repeat className="h-3.5 w-3.5 text-muted-foreground/70" />
+                                )}
                               </div>
-                              
-                              <div className="flex-1 min-w-0 pr-2">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <p className="font-semibold text-base text-foreground truncate">
-                                    {categoryName}
-                                  </p>
-                                  {(transaction.originalId || transaction.recurring) && (
-                                    <Repeat className="h-3.5 w-3.5 text-muted-foreground/70" />
-                                  )}
-                                </div>
 
-                                <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
-                                  <span>{formatDateHe(transaction.date)}</span>
-                                  {transaction.description && (
-                                    <>
-                                      <span className="text-muted-foreground/40">•</span>
-                                      <span className="truncate max-w-[150px]">{transaction.description}</span>
-                                    </>
-                                  )}
+                              <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span>{formatDateHe(transaction.date)}</span>
+                                {transaction.description && (
+                                  <>
+                                    <span className="text-muted-foreground/40">•</span>
+                                    <span className="truncate max-w-[150px]">{transaction.description}</span>
+                                  </>
+                                )}
 
-                                  {transaction.creatorName && (
-                                    <div className="flex items-center gap-1 bg-secondary/50 px-1.5 py-0.5 rounded text-[10px] text-secondary-foreground font-medium select-none">
-                                        <User className="h-3 w-3" />
-                                        {transaction.creatorName}
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* תגיות */}
-                                {transaction.tags && transaction.tags.length > 0 && (
-                                  <div className="mt-2 flex flex-wrap gap-1">
-                                    {transaction.tags.map(tag => (
-                                      <button
-                                        key={tag}
-                                        onClick={(e) => { e.stopPropagation(); setSelectedTag(tag); }}
-                                        className="px-2 py-0.5 text-[10px] bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground rounded-md flex items-center transition-colors border border-transparent hover:border-primary/20"
-                                      >
-                                        <Tag className="h-2.5 w-2.5 mr-1 rtl:ml-1 rtl:mr-0" />
-                                        {tag}
-                                      </button>
-                                    ))}
+                                {transaction.creatorName && (
+                                  <div className="flex items-center gap-1 bg-secondary/50 px-1.5 py-0.5 rounded text-[10px] text-secondary-foreground font-medium select-none">
+                                      <User className="h-3 w-3" />
+                                      {transaction.creatorName}
                                   </div>
                                 )}
                               </div>
+
+                              {/* תגיות */}
+                              {transaction.tags && transaction.tags.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {transaction.tags.map(tag => (
+                                    <button
+                                      key={tag}
+                                      onClick={(e) => { e.stopPropagation(); setSelectedTag(tag); }}
+                                      className="px-2 py-0.5 text-[10px] bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground rounded-md flex items-center transition-colors border border-transparent hover:border-primary/20"
+                                    >
+                                      <Tag className="h-2.5 w-2.5 mr-1 rtl:ml-1 rtl:mr-0" />
+                                      {tag}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
+                          </div>
 
-                            <div className="flex items-center gap-3 rtl:mr-2">
-                              <p className={`text-lg font-bold whitespace-nowrap ${amountColor}`} dir="ltr">
-                                {formatCurrency(transaction.amount)}
-                              </p>
+                          <div className="flex items-center gap-3 rtl:mr-2">
+                            <p className={`text-lg font-bold whitespace-nowrap ${amountColor}`} dir="ltr">
+                              {formatCurrency(transaction.amount)}
+                            </p>
 
-                              {/* כפתורים רגילים שמוסתרים בנייד (כי בנייד עושים Swipe) ומוצגים במחשב */}
-                              <div className="hidden sm:flex flex-col gap-1 sm:flex-row sm:gap-0">
-                                <Button variant="ghost" size="icon" onClick={() => handleDuplicate(transaction)} title="שכפל" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleEdit(transaction)} title="ערוך" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
-                                  <Edit3 className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDelete(transaction)} title="מחק" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                            {/* כפתורים רגילים (מופיעים רק במחשב או במסכים רחבים, בסלולר מחליקים) */}
+                            <div className="hidden sm:flex flex-col gap-1 sm:flex-row sm:gap-0">
+                              <Button variant="ghost" size="icon" onClick={() => handleDuplicate(transaction)} title="שכפל" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleEdit(transaction)} title="ערוך" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full">
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleDelete(transaction)} title="מחק" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
+                          </div>
 
-                          </CardContent>
-                        </Card>
-                      </SwipeableListItem>
-                    </motion.div>
-                  </React.Fragment>
-                );
-              })}
-            </SwipeableList>
+                        </CardContent>
+                      </Card>
+                    </SwipeableTransactionItem>
+                  </motion.div>
+                </React.Fragment>
+              );
+            })}
           </motion.ul>
         )}
       </div>
