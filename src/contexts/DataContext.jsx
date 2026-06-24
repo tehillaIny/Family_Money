@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { db } from '../firebase';
 import {
-  collection, getDocs, setDoc, deleteDoc, doc, writeBatch
+  collection, getDocs, setDoc, deleteDoc, doc, writeBatch, query, where
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { defaultCategories, iconMap, getIconComponent } from '../constants/categories';
@@ -29,13 +29,26 @@ export const DataProvider = ({ children }) => {
       if (!db || !userId) return;
 
       try {
-        const transactionsSnapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
-        const loadedTransactions = transactionsSnapshot.docs
+        const transactionsRef = collection(db, 'users', userId, 'transactions');
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
+        const recentQuery = query(transactionsRef, where('date', '>=', startDateStr));
+        const recentSnapshot = await getDocs(recentQuery);
+        const recurringQuery = query(transactionsRef, where('recurring', '==', true));
+        const recurringSnapshot = await getDocs(recurringQuery);
+        const docsMap = new Map();
+        recentSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
+        recurringSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
+        
+        const allDocs = Array.from(docsMap.values());
+        const loadedTransactions = allDocs
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter(t => !t.deleted);
 
         const deletedMap = new Map();
-        transactionsSnapshot.docs.forEach(doc => {
+        allDocs.forEach(doc => {
           const data = doc.data();
           if (data.deleted) {
             const key = data.originalId || doc.id;
