@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { db } from '../firebase';
 import {
-  collection, getDocs, setDoc, deleteDoc, doc, writeBatch, query, where
+  collection, getDocs, setDoc, deleteDoc, doc, writeBatch, query, where, getDoc
 } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { defaultCategories, iconMap, getIconComponent } from '../constants/categories';
@@ -41,7 +41,7 @@ export const DataProvider = ({ children }) => {
         const docsMap = new Map();
         recentSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
         recurringSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
-        
+
         const allDocs = Array.from(docsMap.values());
         const loadedTransactions = allDocs
           .map(doc => ({ id: doc.id, ...doc.data() }))
@@ -120,6 +120,18 @@ export const DataProvider = ({ children }) => {
     if (!initialized || !transactions.length) return;
 
     const generateFutureRecurringTransactions = async () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const syncDocRef = doc(db, 'users', userId, 'metadata', 'sync_status');
+      
+      try {
+        const syncSnap = await getDoc(syncDocRef);
+        if (syncSnap.exists() && syncSnap.data().lastRecurringSync === todayStr) {
+          return; 
+        }
+      } catch (error) {
+        console.error('❌ Error checking sync status:', error);
+      }
+
       const futureTransactions = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -171,7 +183,6 @@ export const DataProvider = ({ children }) => {
         let nextInstanceDate = calculateNextDate(count);
 
         while (nextInstanceDate <= endByDate && count < maxCount) {
-          
           const isoDate = toLocalISOString(nextInstanceDate);
           
           const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
@@ -198,12 +209,16 @@ export const DataProvider = ({ children }) => {
       if (futureTransactions.length > 0) {
         await addTransactions(futureTransactions);
       }
+
+      try {
+        await setDoc(syncDocRef, { lastRecurringSync: todayStr }, { merge: true });
+      } catch (error) {
+        console.error('❌ Error updating sync status:', error);
+      }
     };
 
     generateFutureRecurringTransactions();
   }, [initialized, transactions.length, deletedTransactions, currentDate]); 
-
-  // --- 3. CRUD Operations ---
 
   const addTransaction = async (transaction) => {    
     const id = transaction.id || generateId();
