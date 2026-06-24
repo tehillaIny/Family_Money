@@ -1,23 +1,16 @@
 import React, { createContext, useState, useEffect } from 'react';
-import { db } from '../firebase';
-import {
-  collection, getDocs, setDoc, deleteDoc, doc, writeBatch, query, where, getDoc
-} from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { defaultCategories, iconMap, getIconComponent } from '../constants/categories';
 import { toLocalISOString } from '../lib/utils';
+import { dbService } from '../services/dbService';
 
 const DataContext = createContext();
 
-const generateId = () => doc(collection(db, 'transactions')).id;
-
-// --- Provider ---
 export const DataProvider = ({ children }) => {
   const [initialized, setInitialized] = useState(false);
-  
   const { familyId, userData, currentUser } = useAuth();
-  
   const userId = familyId; 
+  
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -26,42 +19,16 @@ export const DataProvider = ({ children }) => {
   // --- 1. Initial Data Fetching ---
   useEffect(() => {
     const fetchData = async () => {
-      if (!db || !userId) return;
+      if (!userId) return;
 
       try {
-        const transactionsRef = collection(db, 'users', userId, 'transactions');
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-        const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
-        const recentQuery = query(transactionsRef, where('date', '>=', startDateStr));
-        const recentSnapshot = await getDocs(recentQuery);
-        const recurringQuery = query(transactionsRef, where('recurring', '==', true));
-        const recurringSnapshot = await getDocs(recurringQuery);
-        const docsMap = new Map();
-        recentSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
-        recurringSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
-
-        const allDocs = Array.from(docsMap.values());
-        const loadedTransactions = allDocs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(t => !t.deleted);
-
-        const deletedMap = new Map();
-        allDocs.forEach(doc => {
-          const data = doc.data();
-          if (data.deleted) {
-            const key = data.originalId || doc.id;
-            if (!deletedMap.has(key)) deletedMap.set(key, new Set());
-            deletedMap.get(key).add(data.date);
-          }
-        });
+        const { loadedTransactions, categoriesDocs, deletedMap } = await dbService.fetchInitialData(userId);
+        
         setDeletedTransactions(deletedMap);
         setTransactions(loadedTransactions);
 
-        const categoriesSnapshot = await getDocs(collection(db, 'users', userId, 'categories'));
         const usedCategoryIds = new Set((loadedTransactions || []).map(t => t.categoryId).filter(Boolean));
-        const rawCategories = categoriesSnapshot.docs.map(docSnap => ({
+        const rawCategories = categoriesDocs.map(docSnap => ({
           ...docSnap.data(),
           firestoreId: docSnap.id,
           dataId: docSnap.data().id,
@@ -94,13 +61,7 @@ export const DataProvider = ({ children }) => {
         });
 
         if (loadedCategories.length === 0) {
-          const batch = writeBatch(db);
-          defaultCategories.forEach(category => {
-            const docRef = doc(db, 'users', userId, 'categories', category.id);
-            const { id, ...categoryData } = category;
-            batch.set(docRef, categoryData);
-          });
-          await batch.commit();
+          await dbService.saveCategoriesBatch(userId, defaultCategories);
           setCategories(defaultCategories);
         } else {
           setCategories(loadedCategories);
@@ -121,13 +82,10 @@ export const DataProvider = ({ children }) => {
 
     const generateFutureRecurringTransactions = async () => {
       const todayStr = new Date().toISOString().split('T')[0];
-      const syncDocRef = doc(db, 'users', userId, 'metadata', 'sync_status');
       
       try {
-        const syncSnap = await getDoc(syncDocRef);
-        if (syncSnap.exists() && syncSnap.data().lastRecurringSync === todayStr) {
-          return; 
-        }
+        const isAlreadySynced = await dbService.checkSyncStatus(userId, todayStr);
+        if (isAlreadySynced) return;
       } catch (error) {
         console.error('❌ Error checking sync status:', error);
       }
@@ -184,7 +142,6 @@ export const DataProvider = ({ children }) => {
 
         while (nextInstanceDate <= endByDate && count < maxCount) {
           const isoDate = toLocalISOString(nextInstanceDate);
-          
           const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
           const alreadyExists = transactions.some(
             (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
@@ -193,7 +150,7 @@ export const DataProvider = ({ children }) => {
           if (!alreadyExists && !isDeleted && nextInstanceDate >= today) {
             futureTransactions.push({
               ...t,
-              id: generateId(),
+              id: dbService.generateId(userId),
               originalId: t.id,
               date: isoDate,
               recurring: false,
@@ -211,7 +168,7 @@ export const DataProvider = ({ children }) => {
       }
 
       try {
-        await setDoc(syncDocRef, { lastRecurringSync: todayStr }, { merge: true });
+        await dbService.updateSyncStatus(userId, todayStr);
       } catch (error) {
         console.error('❌ Error updating sync status:', error);
       }
@@ -220,12 +177,11 @@ export const DataProvider = ({ children }) => {
     generateFutureRecurringTransactions();
   }, [initialized, transactions.length, deletedTransactions, currentDate]); 
 
+  // --- 3. CRUD Operations ---
   const addTransaction = async (transaction) => {    
-    const id = transaction.id || generateId();
+    const id = transaction.id || dbService.generateId(userId);
     const createdAt = transaction.createdAt || Date.now();
-    
     const safeDate = toLocalISOString(transaction.date);
-    
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newTransaction = { 
@@ -238,8 +194,8 @@ export const DataProvider = ({ children }) => {
     };
     
     setTransactions(prev => [...prev, newTransaction]);
-    if (db && userId) {
-      await setDoc(doc(db, 'users', userId, 'transactions', id), newTransaction);
+    if (userId) {
+      await dbService.saveTransaction(userId, id, newTransaction);
     }
     return newTransaction;
   };
@@ -249,26 +205,19 @@ export const DataProvider = ({ children }) => {
     
     const newTransactions = transactionsArray.map(t => ({
       ...t,
-      id: t.id || generateId(),
+      id: t.id || dbService.generateId(userId),
       createdAt: t.createdAt || Date.now(),
       date: toLocalISOString(t.date)
     }));
     
     setTransactions(prev => [...prev, ...newTransactions]);
-    
-    if (db && userId) {
-      const batch = writeBatch(db);
-      newTransactions.forEach(t => {
-        const docRef = doc(db, 'users', userId, 'transactions', t.id);
-        batch.set(docRef, t);
-      });
-      await batch.commit();
+    if (userId) {
+      await dbService.saveTransactionsBatch(userId, newTransactions);
     }
   };
 
   const updateTransaction = async (updatedTransaction) => {
     const safeDate = toLocalISOString(updatedTransaction.date);
-    
     const payload = { 
         ...updatedTransaction, 
         date: safeDate,
@@ -276,16 +225,15 @@ export const DataProvider = ({ children }) => {
     };
 
     setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? payload : t)));
-    
-    if (db && userId) {
-      await setDoc(doc(db, 'users', userId, 'transactions', updatedTransaction.id), payload);
+    if (userId) {
+      await dbService.saveTransaction(userId, updatedTransaction.id, payload);
     }
   };
 
   const deleteTransaction = async (transactionId) => {
     setTransactions(prev => prev.filter(t => t.id !== transactionId));
-    if (db && userId) {
-      await deleteDoc(doc(db, 'users', userId, 'transactions', transactionId));
+    if (userId) {
+      await dbService.deleteTransaction(userId, transactionId);
     }
   };
 
@@ -294,11 +242,10 @@ export const DataProvider = ({ children }) => {
     const transactionToDelete = transactions.find(t => t.id === transactionId);
     if (!transactionToDelete) return;
 
-    if (db && userId) {
-        await setDoc(doc(db, 'users', userId, 'transactions', transactionId), { 
-            ...transactionToDelete, 
-            deleted: true 
-        });
+    const payload = { ...transactionToDelete, deleted: true };
+
+    if (userId) {
+        await dbService.saveTransaction(userId, transactionId, payload);
     }
 
     setDeletedTransactions(prev => {
@@ -329,19 +276,13 @@ export const DataProvider = ({ children }) => {
     }
 
     const terminationIso = toLocalISOString(terminationDate);
-    
     const transactionsToDelete = transactions.filter(t => {
         const isPartOfSeries = t.id === originalId || t.originalId === originalId;
         return isPartOfSeries && t.date >= terminationIso && t.id !== originalId;
     });
 
-    if (db && userId && transactionsToDelete.length > 0) {
-        const batch = writeBatch(db);
-        transactionsToDelete.forEach(t => {
-            const docRef = doc(db, 'users', userId, 'transactions', t.id);
-            batch.update(docRef, { deleted: true });
-        });
-        await batch.commit();
+    if (userId && transactionsToDelete.length > 0) {
+        await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
     }
 
     setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
@@ -366,20 +307,18 @@ export const DataProvider = ({ children }) => {
   const editFromCurrentOnward = async (transaction, updates) => {
     const [y, m, d] = transaction.date.split('-').map(Number);
     const splitDate = new Date(y, m - 1, d, 12, 0, 0); 
-    
     const originalId = transaction.originalId || transaction.id;
     const originalTransaction = transactions.find(t => t.id === originalId);
     
     if (!originalTransaction) return;
 
     await terminateSeriesAtDate(transaction, splitDate);
-
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newSeriesTransaction = {
         ...originalTransaction, 
         ...updates,             
-        id: generateId(),
+        id: dbService.generateId(userId),
         originalId: null,       
         date: toLocalISOString(splitDate),
         createdAt: Date.now(),
@@ -399,13 +338,8 @@ export const DataProvider = ({ children }) => {
         t.id === originalId || t.originalId === originalId
     );
 
-    if (db && userId && transactionsToDelete.length > 0) {
-        const batch = writeBatch(db);
-        transactionsToDelete.forEach(t => {
-            const docRef = doc(db, 'users', userId, 'transactions', t.id);
-            batch.update(docRef, { deleted: true });
-        });
-        await batch.commit();
+    if (userId && transactionsToDelete.length > 0) {
+        await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
     }
     
     setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
@@ -418,21 +352,13 @@ export const DataProvider = ({ children }) => {
   const editEntireSeries = async (originalId, updates) => {
     const seriesTransactions = transactions.filter(t => t.id === originalId || t.originalId === originalId);
     const childrenToDelete = seriesTransactions.filter(t => t.id !== originalId);
+    const parent = seriesTransactions.find(t => t.id === originalId);
     
-    if (db && userId) {
-        const batch = writeBatch(db);
-        childrenToDelete.forEach(t => {
-            const docRef = doc(db, 'users', userId, 'transactions', t.id);
-            batch.delete(docRef); 
-        });
+    const updatedParent = { ...parent, ...updates };
+    if (updates.date) updatedParent.date = toLocalISOString(updates.date);
 
-        const parentDocRef = doc(db, 'users', userId, 'transactions', originalId);
-        const updatedParent = { ...seriesTransactions.find(t => t.id === originalId), ...updates };
-        if (updates.date) updatedParent.date = toLocalISOString(updates.date);
-        
-        batch.set(parentDocRef, updatedParent, { merge: true });
-        
-        await batch.commit();
+    if (userId) {
+        await dbService.editEntireSeriesDb(userId, originalId, childrenToDelete, updatedParent);
     }
 
     setDeletedTransactions(prev => {
@@ -442,10 +368,6 @@ export const DataProvider = ({ children }) => {
     });
 
     setTransactions(prev => {
-        const parent = prev.find(t => t.id === originalId);
-        const updatedParent = { ...parent, ...updates };
-        if (updates.date) updatedParent.date = toLocalISOString(updates.date);
-
         const otherTransactions = prev.filter(t => t.id !== originalId && t.originalId !== originalId);
         return [...otherTransactions, updatedParent];
     });
@@ -496,13 +418,13 @@ export const DataProvider = ({ children }) => {
 
   // --- 6. Categories CRUD ---  
   const addCategory = async (newCategory) => {
-    const id = 'cat_' + doc(collection(db, 'categories')).id;
+    const id = 'cat_' + dbService.generateId(userId);
     const category = { ...newCategory, id };
     const { icon, ...categoryToSave } = category;
     
     setCategories(prev => [...prev, { ...category, icon: getIconComponent(newCategory.iconName) }]);
-    if (db && userId) {
-        await setDoc(doc(db, 'users', userId, 'categories', id), categoryToSave);
+    if (userId) {
+        await dbService.saveCategory(userId, id, categoryToSave);
     }
   };
 
@@ -511,15 +433,15 @@ export const DataProvider = ({ children }) => {
     const newCategory = { ...updatedCategory, icon: getIconComponent(updatedCategory.iconName) };
     
     setCategories(prev => prev.map(cat => cat.id === newCategory.id ? newCategory : cat));
-    if (db && userId) {
-        await setDoc(doc(db, 'users', userId, 'categories', newCategory.id), categoryToSave);
+    if (userId) {
+        await dbService.saveCategory(userId, newCategory.id, categoryToSave);
     }
   };
 
   const deleteCategory = async (categoryId) => {
     setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    if (db && userId) {
-        await deleteDoc(doc(db, 'users', userId, 'categories', categoryId));
+    if (userId) {
+        await dbService.deleteCategory(userId, categoryId);
     }
   };
 
@@ -532,18 +454,14 @@ export const DataProvider = ({ children }) => {
   };
 
   const resetUserData = async () => {
-     if (!db || !userId) return;
-     const snapshot = await getDocs(collection(db, 'users', userId, 'transactions'));
-     const batch = writeBatch(db);
-     snapshot.docs.forEach(doc => batch.delete(doc.ref));
-     await batch.commit();
+     if (!userId) return;
+     await dbService.resetUserData(userId);
      setTransactions([]);
      setDeletedTransactions(new Map());
   };
   
- const searchTransactions = (query) => {
+  const searchTransactions = (query) => {
     let filtered = transactions;
-    
     if (query && typeof query === 'string') {
       const lowerQuery = query.toLowerCase();
       filtered = transactions.filter(t => {
