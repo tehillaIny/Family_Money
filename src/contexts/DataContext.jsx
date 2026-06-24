@@ -3,6 +3,14 @@ import { useAuth } from './AuthContext';
 import { defaultCategories, iconMap, getIconComponent } from '../constants/categories';
 import { toLocalISOString } from '../lib/utils';
 import { dbService } from '../services/dbService';
+import { useRecurringTransactions } from '../hooks/useRecurringTransactions';
+import { 
+  getTransactionsForMonth, 
+  getBalanceForMonth, 
+  getCategorySummariesForMonth, 
+  getIncomeSummariesForMonth, 
+  searchTransactionsList 
+} from '../lib/transactionUtils';
 
 const DataContext = createContext();
 
@@ -20,7 +28,6 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     const fetchData = async () => {
       if (!userId) return;
-
       try {
         const { loadedTransactions, categoriesDocs, deletedMap } = await dbService.fetchInitialData(userId);
         
@@ -66,7 +73,6 @@ export const DataProvider = ({ children }) => {
         } else {
           setCategories(loadedCategories);
         }
-
         setInitialized(true);
       } catch (error) {
         console.error('❌ Error loading data:', error);
@@ -76,106 +82,15 @@ export const DataProvider = ({ children }) => {
     fetchData();
   }, [userId]);
 
-  // --- 2. Generator for Recurring Transactions ---
-  useEffect(() => {
-    if (!initialized || !transactions.length) return;
-
-    const generateFutureRecurringTransactions = async () => {
-      const todayStr = new Date().toISOString().split('T')[0];
-      
-      try {
-        const isAlreadySynced = await dbService.checkSyncStatus(userId, todayStr);
-        if (isAlreadySynced) return;
-      } catch (error) {
-        console.error('❌ Error checking sync status:', error);
-      }
-
-      const futureTransactions = [];
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const endDate = new Date(currentDate);
-      endDate.setMonth(endDate.getMonth() + 3);
-
-      const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
-
-      const parseLocalDate = (dateStr) => {
-          if (!dateStr) return new Date();
-          const [y, m, d] = dateStr.split('-').map(Number);
-          return new Date(y, m - 1, d, 12, 0, 0); 
-      };
-
-      for (const t of recurringTransactions) {
-        if (!t.recurrenceFrequency) continue;
-
-        const startDate = parseLocalDate(t.date);
-        const startDay = startDate.getDate(); 
-
-        const maxCount = t.recurrenceEndType === 'count' ? (t.recurrenceOccurrences || 100) : 1000;
-        let endByDate = endDate;
-        if (t.recurrenceEndType === 'date' && t.recurrenceEndDate) {
-            const explicitEndDate = parseLocalDate(t.recurrenceEndDate);
-            explicitEndDate.setHours(23, 59, 59);
-            endByDate = explicitEndDate < endDate ? explicitEndDate : endDate;
-        }
-
-        let count = 1; 
-
-        const calculateNextDate = (index) => {
-            const d = new Date(startDate);
-            d.setHours(12, 0, 0, 0); 
-
-            if (t.recurrenceFrequency === 'monthly') {
-                d.setMonth(startDate.getMonth() + index);
-                if (d.getDate() !== startDay) {
-                    d.setDate(0); 
-                }
-            } else if (t.recurrenceFrequency === 'weekly') {
-                d.setDate(startDate.getDate() + (index * 7));
-            } else if (t.recurrenceFrequency === 'daily') {
-                d.setDate(startDate.getDate() + index);
-            }
-            return d;
-        };
-
-        let nextInstanceDate = calculateNextDate(count);
-
-        while (nextInstanceDate <= endByDate && count < maxCount) {
-          const isoDate = toLocalISOString(nextInstanceDate);
-          const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
-          const alreadyExists = transactions.some(
-            (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
-          );
-
-          if (!alreadyExists && !isDeleted && nextInstanceDate >= today) {
-            futureTransactions.push({
-              ...t,
-              id: dbService.generateId(userId),
-              originalId: t.id,
-              date: isoDate,
-              recurring: false,
-              createdAt: Date.now()
-            });
-          }
-
-          count++;
-          nextInstanceDate = calculateNextDate(count);
-        }
-      }
-
-      if (futureTransactions.length > 0) {
-        await addTransactions(futureTransactions);
-      }
-
-      try {
-        await dbService.updateSyncStatus(userId, todayStr);
-      } catch (error) {
-        console.error('❌ Error updating sync status:', error);
-      }
-    };
-
-    generateFutureRecurringTransactions();
-  }, [initialized, transactions.length, deletedTransactions, currentDate]); 
+  // --- 2. Recurring Transactions Generator ---
+  useRecurringTransactions({
+    initialized,
+    transactions,
+    deletedTransactions,
+    currentDate,
+    userId,
+    addTransactions: async (newTxs) => await addTransactions(newTxs) 
+  });
 
   // --- 3. CRUD Operations ---
   const addTransaction = async (transaction) => {    
@@ -185,56 +100,35 @@ export const DataProvider = ({ children }) => {
     const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newTransaction = { 
-        ...transaction, 
-        id, 
-        createdAt,
-        date: safeDate,
-        createdBy: currentUser?.uid, 
-        creatorName: creatorName     
+        ...transaction, id, createdAt, date: safeDate, createdBy: currentUser?.uid, creatorName 
     };
     
     setTransactions(prev => [...prev, newTransaction]);
-    if (userId) {
-      await dbService.saveTransaction(userId, id, newTransaction);
-    }
+    if (userId) await dbService.saveTransaction(userId, id, newTransaction);
     return newTransaction;
   };
 
   const addTransactions = async (transactionsArray) => {
     if (transactionsArray.length === 0) return;
-    
     const newTransactions = transactionsArray.map(t => ({
-      ...t,
-      id: t.id || dbService.generateId(userId),
-      createdAt: t.createdAt || Date.now(),
-      date: toLocalISOString(t.date)
+      ...t, id: t.id || dbService.generateId(userId), createdAt: t.createdAt || Date.now(), date: toLocalISOString(t.date)
     }));
     
     setTransactions(prev => [...prev, ...newTransactions]);
-    if (userId) {
-      await dbService.saveTransactionsBatch(userId, newTransactions);
-    }
+    if (userId) await dbService.saveTransactionsBatch(userId, newTransactions);
   };
 
   const updateTransaction = async (updatedTransaction) => {
     const safeDate = toLocalISOString(updatedTransaction.date);
-    const payload = { 
-        ...updatedTransaction, 
-        date: safeDate,
-        createdAt: updatedTransaction.createdAt || Date.now() 
-    };
+    const payload = { ...updatedTransaction, date: safeDate, createdAt: updatedTransaction.createdAt || Date.now() };
 
     setTransactions(prev => prev.map(t => (t.id === updatedTransaction.id ? payload : t)));
-    if (userId) {
-      await dbService.saveTransaction(userId, updatedTransaction.id, payload);
-    }
+    if (userId) await dbService.saveTransaction(userId, updatedTransaction.id, payload);
   };
 
   const deleteTransaction = async (transactionId) => {
     setTransactions(prev => prev.filter(t => t.id !== transactionId));
-    if (userId) {
-      await dbService.deleteTransaction(userId, transactionId);
-    }
+    if (userId) await dbService.deleteTransaction(userId, transactionId);
   };
 
   // --- 4. Special Recurrence Handlers ---
@@ -242,11 +136,7 @@ export const DataProvider = ({ children }) => {
     const transactionToDelete = transactions.find(t => t.id === transactionId);
     if (!transactionToDelete) return;
 
-    const payload = { ...transactionToDelete, deleted: true };
-
-    if (userId) {
-        await dbService.saveTransaction(userId, transactionId, payload);
-    }
+    if (userId) await dbService.saveTransaction(userId, transactionId, { ...transactionToDelete, deleted: true });
 
     setDeletedTransactions(prev => {
       const newMap = new Map(prev);
@@ -255,7 +145,6 @@ export const DataProvider = ({ children }) => {
       newMap.get(key).add(transactionToDelete.date);
       return newMap;
     });
-
     setTransactions(prev => prev.filter(t => t.id !== transactionId));
   };
 
@@ -266,13 +155,7 @@ export const DataProvider = ({ children }) => {
     if (originalTransaction) {
         const endDateForOldSeries = new Date(terminationDate);
         endDateForOldSeries.setDate(endDateForOldSeries.getDate() - 1); 
-
-        const updatedOriginal = {
-            ...originalTransaction,
-            recurrenceEndType: 'date',
-            recurrenceEndDate: toLocalISOString(endDateForOldSeries)
-        };
-        await updateTransaction(updatedOriginal);
+        await updateTransaction({ ...originalTransaction, recurrenceEndType: 'date', recurrenceEndDate: toLocalISOString(endDateForOldSeries) });
     }
 
     const terminationIso = toLocalISOString(terminationDate);
@@ -281,12 +164,9 @@ export const DataProvider = ({ children }) => {
         return isPartOfSeries && t.date >= terminationIso && t.id !== originalId;
     });
 
-    if (userId && transactionsToDelete.length > 0) {
-        await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
-    }
+    if (userId && transactionsToDelete.length > 0) await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
 
     setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
-    
     setDeletedTransactions(prev => {
         const newMap = new Map(prev);
         transactionsToDelete.forEach(t => {
@@ -300,8 +180,7 @@ export const DataProvider = ({ children }) => {
 
   const deleteFromCurrentOnward = async (transaction) => {
     const [y, m, d] = transaction.date.split('-').map(Number);
-    const currentDateObj = new Date(y, m - 1, d, 12, 0, 0); 
-    await terminateSeriesAtDate(transaction, currentDateObj);
+    await terminateSeriesAtDate(transaction, new Date(y, m - 1, d, 12, 0, 0));
   };
 
   const editFromCurrentOnward = async (transaction, updates) => {
@@ -311,110 +190,50 @@ export const DataProvider = ({ children }) => {
     const originalTransaction = transactions.find(t => t.id === originalId);
     
     if (!originalTransaction) return;
-
     await terminateSeriesAtDate(transaction, splitDate);
-    const creatorName = userData?.name || currentUser?.email?.split('@')[0] || 'Unknown';
 
     const newSeriesTransaction = {
-        ...originalTransaction, 
-        ...updates,             
-        id: dbService.generateId(userId),
-        originalId: null,       
-        date: toLocalISOString(splitDate),
-        createdAt: Date.now(),
-        recurring: true,
+        ...originalTransaction, ...updates,             
+        id: dbService.generateId(userId), originalId: null, date: toLocalISOString(splitDate), createdAt: Date.now(), recurring: true,
         recurrenceEndType: updates.recurrenceEndType || originalTransaction.recurrenceEndType,
         recurrenceEndDate: updates.recurrenceEndDate || originalTransaction.recurrenceEndDate,
         recurrenceOccurrences: updates.recurrenceOccurrences || originalTransaction.recurrenceOccurrences,
-        createdBy: currentUser?.uid,
-        creatorName: creatorName
+        createdBy: currentUser?.uid, creatorName: userData?.name || currentUser?.email?.split('@')[0] || 'Unknown'
     };
-
     await addTransaction(newSeriesTransaction);
   };
 
   const deleteEntireSeries = async (originalId) => {
-    const transactionsToDelete = transactions.filter(t => 
-        t.id === originalId || t.originalId === originalId
-    );
-
-    if (userId && transactionsToDelete.length > 0) {
-        await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
-    }
-    
+    const transactionsToDelete = transactions.filter(t => t.id === originalId || t.originalId === originalId);
+    if (userId && transactionsToDelete.length > 0) await dbService.updateTransactionsDeletedBatch(userId, transactionsToDelete);
     setTransactions(prev => prev.filter(t => !transactionsToDelete.some(del => del.id === t.id)));
   };
 
-  const editSingleTransaction = async (updatedTransaction) => {
-    await updateTransaction(updatedTransaction);
-  };
+  const editSingleTransaction = async (updatedTransaction) => await updateTransaction(updatedTransaction);
 
   const editEntireSeries = async (originalId, updates) => {
     const seriesTransactions = transactions.filter(t => t.id === originalId || t.originalId === originalId);
     const childrenToDelete = seriesTransactions.filter(t => t.id !== originalId);
-    const parent = seriesTransactions.find(t => t.id === originalId);
-    
-    const updatedParent = { ...parent, ...updates };
+    const updatedParent = { ...seriesTransactions.find(t => t.id === originalId), ...updates };
     if (updates.date) updatedParent.date = toLocalISOString(updates.date);
 
-    if (userId) {
-        await dbService.editEntireSeriesDb(userId, originalId, childrenToDelete, updatedParent);
-    }
+    if (userId) await dbService.editEntireSeriesDb(userId, originalId, childrenToDelete, updatedParent);
 
     setDeletedTransactions(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(originalId); 
-        return newMap;
+      const newMap = new Map(prev);
+      newMap.delete(originalId); 
+      return newMap;
     });
 
-    setTransactions(prev => {
-        const otherTransactions = prev.filter(t => t.id !== originalId && t.originalId !== originalId);
-        return [...otherTransactions, updatedParent];
-    });
+    setTransactions(prev => [...prev.filter(t => t.id !== originalId && t.originalId !== originalId), updatedParent]);
   };
 
-  // --- 5. Data Getters ---
-  const getTransactionsForMonth = (date = currentDate, { excludeFuture = false } = {}) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return transactions
-      .filter(t => {
-        const [y, m, d] = t.date.split('-').map(Number);
-        const tDate = new Date(y, m - 1, d); 
-        
-        if (excludeFuture && tDate > today) return false;
-        return tDate.getMonth() === date.getMonth() && tDate.getFullYear() === date.getFullYear();
-      })
-      .sort((a, b) => {
-        const da = new Date(a.date);
-        const db_date = new Date(b.date);
-        if (db_date.getTime() !== da.getTime()) return db_date - da;
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-  };
-
-  const getBalanceForMonth = (date = currentDate) => {
-    const monthTransactions = getTransactionsForMonth(date, { excludeFuture: true });
-    const income = monthTransactions
-      .filter(t => t.type === 'income')
-      .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-    const expenses = monthTransactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-    return { income, expenses, balance: income - expenses };
-  };
-
-  const getCategorySummariesForMonth = (date = currentDate, type = 'expense') => {
-    const monthTransactions = getTransactionsForMonth(date, { excludeFuture: true }).filter(t => t.type === type);
-    const summaries = {};
-    monthTransactions.forEach(t => {
-      summaries[t.categoryId] = (summaries[t.categoryId] || 0) + parseFloat(t.amount || 0);
-    });
-    return Object.entries(summaries).map(([categoryId, total]) => ({ categoryId, total }));
-  };
-
-  const getIncomeSummariesForMonth = (date = currentDate) => getCategorySummariesForMonth(date, 'income');
+  // --- 5. Data Getters (Using the new Utils) ---
+  const contextGetTransactionsForMonth = (date = currentDate, options) => getTransactionsForMonth(transactions, date, options);
+  const contextGetBalanceForMonth = (date = currentDate) => getBalanceForMonth(transactions, date);
+  const contextGetCategorySummariesForMonth = (date = currentDate, type = 'expense') => getCategorySummariesForMonth(transactions, date, type);
+  const contextGetIncomeSummariesForMonth = (date = currentDate) => getIncomeSummariesForMonth(transactions, date);
+  const contextSearchTransactions = (query) => searchTransactionsList(transactions, categories, query);
 
   // --- 6. Categories CRUD ---  
   const addCategory = async (newCategory) => {
@@ -423,9 +242,7 @@ export const DataProvider = ({ children }) => {
     const { icon, ...categoryToSave } = category;
     
     setCategories(prev => [...prev, { ...category, icon: getIconComponent(newCategory.iconName) }]);
-    if (userId) {
-        await dbService.saveCategory(userId, id, categoryToSave);
-    }
+    if (userId) await dbService.saveCategory(userId, id, categoryToSave);
   };
 
   const updateCategory = async (updatedCategory) => {
@@ -433,23 +250,17 @@ export const DataProvider = ({ children }) => {
     const newCategory = { ...updatedCategory, icon: getIconComponent(updatedCategory.iconName) };
     
     setCategories(prev => prev.map(cat => cat.id === newCategory.id ? newCategory : cat));
-    if (userId) {
-        await dbService.saveCategory(userId, newCategory.id, categoryToSave);
-    }
+    if (userId) await dbService.saveCategory(userId, newCategory.id, categoryToSave);
   };
 
   const deleteCategory = async (categoryId) => {
     setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-    if (userId) {
-        await dbService.deleteCategory(userId, categoryId);
-    }
+    if (userId) await dbService.deleteCategory(userId, categoryId);
   };
 
   const getCategoryById = (categoryId) => {
     const category = categories.find(cat => cat.id === categoryId);
-    if (category && !category.icon && category.iconName) {
-      return { ...category, icon: getIconComponent(category.iconName) };
-    }
+    if (category && !category.icon && category.iconName) return { ...category, icon: getIconComponent(category.iconName) };
     return category;
   };
 
@@ -460,37 +271,19 @@ export const DataProvider = ({ children }) => {
      setDeletedTransactions(new Map());
   };
   
-  const searchTransactions = (query) => {
-    let filtered = transactions;
-    if (query && typeof query === 'string') {
-      const lowerQuery = query.toLowerCase();
-      filtered = transactions.filter(t => {
-        const category = categories.find(c => c.id === t.categoryId);
-        return (
-          category?.name_he?.toLowerCase().includes(lowerQuery) ||
-          t.description?.toLowerCase().includes(lowerQuery) ||
-          (t.tags || []).join(' ').toLowerCase().includes(lowerQuery)
-        );
-      });
-    }
-
-    return filtered.sort((a, b) => {
-      const da = new Date(a.date);
-      const db_date = new Date(b.date);
-      if (db_date.getTime() !== da.getTime()) return db_date - da;
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    });
-  };
-
   return (
     <DataContext.Provider value={{
       transactions, categories, currentDate, setCurrentDate,
       addTransaction, addTransactions, updateTransaction, deleteTransaction,
-      getTransactionsForMonth, getBalanceForMonth, getCategorySummariesForMonth, getIncomeSummariesForMonth,
+      getTransactionsForMonth: contextGetTransactionsForMonth, 
+      getBalanceForMonth: contextGetBalanceForMonth, 
+      getCategorySummariesForMonth: contextGetCategorySummariesForMonth, 
+      getIncomeSummariesForMonth: contextGetIncomeSummariesForMonth,
+      searchTransactions: contextSearchTransactions,
       getCategoryById, setCategories, updateCategory, addCategory, deleteCategory,
       deleteSingleTransaction, deleteEntireSeries, deleteFromCurrentOnward,
       editSingleTransaction, editEntireSeries, editFromCurrentOnward,
-      getIconComponent, resetUserData, iconMap, initialized, searchTransactions,
+      getIconComponent, resetUserData, iconMap, initialized, 
     }}>
       {children}
     </DataContext.Provider>
