@@ -26,15 +26,9 @@ import {
 } from "@/components/ui/alert-dialog.jsx";
 import CsvExportButton from "@/components/ui/CsvExportButton.jsx";
 import CsvImport from "@/components/shared/CsvImport.jsx";
+import { iconMap, getIconComponent } from '@/constants/categories';
 
-// אייקונים לקטגוריות
-import {
-  Home, DollarSign, Coffee, Truck, ShoppingCart, Heart, BookOpen, Music,
-} from 'lucide-react';
-
-// --- רכיב טופס הקטגוריה ---
-const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent }) => {
-    const [name_he, setNameHe] = useState(category?.name_he || '');
+const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent, activeCount }) => {    const [name_he, setNameHe] = useState(category?.name_he || '');
     const [iconName, setIconName] = useState(category?.iconName || Object.keys(iconMap)[0]);
     const [color, setColor] = useState(category?.color || 'text-blue-500');
     const [type, setType] = useState(category?.type || 'expense');
@@ -79,6 +73,20 @@ const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent })
         showOnDashboard,
       });
     };
+
+    const handleDashboardToggle = (checked) => {
+        // אם המשתמש מנסה להדליק (checked === true) ויש כבר 12
+        // והוא לא עורך קטגוריה שכבר הייתה דלוקה (כי אז הוא לא "מוסיף" חדשה)
+        if (checked && activeCount >= 12 && !showOnDashboard) {
+            toast({ 
+                title: "הגעת למגבלה", 
+                description: "ניתן להציג עד 12 קטגוריות בדאשבורד. אנא הסר קטגוריה אחרת לפני.", 
+                variant: "destructive" 
+            });
+            return;
+        }
+        setShowOnDashboard(checked);
+    }
   
     return (
       <div className="space-y-4 p-1">
@@ -144,11 +152,20 @@ const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent })
             </SelectContent>
           </Select>
         </div>
-  
+        
         {type === 'expense' && (
-          <div className="flex items-center space-x-2 rtl:space-x-reverse pt-2">
-            <Switch id="showOnDashboard" checked={showOnDashboard} onCheckedChange={setShowOnDashboard} />
-            <Label htmlFor="showOnDashboard">הצג בלוח המחוונים</Label>
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center space-x-2 rtl:space-x-reverse">
+              <Switch 
+                id="showOnDashboard"
+                checked={showOnDashboard}
+                onCheckedChange={handleDashboardToggle} 
+                />
+              <Label htmlFor="showOnDashboard">הצג בלוח המחוונים</Label>
+            </div>
+            <p className="text-xs text-muted-foreground mr-8 pr-1">
+               * ניתן להציג עד 12 קטגוריות במעגל הראשי.
+            </p>
           </div>
         )}
   
@@ -160,7 +177,6 @@ const CategoryForm = ({ category, onSave, onCancel, iconMap, getIconComponent })
     );
   };
 
-// --- הדף הראשי ---
 export default function SettingsPage() {
   const { 
     logout, currentUser, familyId, joinFamily, familyMembers, 
@@ -180,12 +196,10 @@ export default function SettingsPage() {
   const [editingCategory, setEditingCategory] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // State עבור הצטרפות למשפחה
   const [targetFamilyCode, setTargetFamilyCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // State עבור עריכת שם (פרופיל)
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [nameToEdit, setNameToEdit] = useState('');
 
@@ -201,14 +215,6 @@ export default function SettingsPage() {
     }
   };
 
-  const iconMap = {
-    home: Home, money: DollarSign, food: Coffee, transport: Truck,
-    shopping: ShoppingCart, health: Heart, education: BookOpen, entertainment: Music,
-  };
-
-  const getIconComponent = (iconName) => iconMap[iconName] || Palette;
-
-  // --- CRUD קטגוריות ---
   const handleSaveCategory = (category) => {
     if (category.id) {
       updateCategory(category);
@@ -236,7 +242,6 @@ export default function SettingsPage() {
     toast({ title: 'קטגוריות יובאו בהצלחה' });
   };
 
-  // פונקציית איפוס נתונים
   const handleResetUserData = async () => {
     await resetUserData();
     toast({ title: 'הנתונים אופסו בהצלחה' });
@@ -269,7 +274,6 @@ export default function SettingsPage() {
     }
   };
 
-  // לוגיקה לעריכת שם
   const openNameDialog = () => {
     setNameToEdit(userData?.name || currentUser?.email?.split('@')[0] || '');
     setIsNameDialogOpen(true);
@@ -286,7 +290,6 @@ export default function SettingsPage() {
     }
   };
 
-  // פונקציה ליצירת ראשי תיבות
   const getInitials = (name) => {
     if (!name) return '?';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -301,13 +304,15 @@ export default function SettingsPage() {
     return colors[Math.abs(hash) % colors.length];
   };
 
+  const activeCount = categories.filter(c => c.showOnDashboard).length;
+
   return (
     <div className="pb-20">
       <Header title="הגדרות" subtitle="ניהול חשבון ומשפחה" />
 
       <div className="space-y-6 container mx-auto p-4">
         
-        {/* --- כרטיסייה 1: החשבון שלי --- */}
+        {/* My Account */}
         <Card className="max-w-3xl mx-auto shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -317,7 +322,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             
-            {/* אזור פרטים אישיים */}
+            {/* Profile Information */}
             <div className="flex items-center justify-between bg-secondary/30 p-3 rounded-lg border border-border">
                 <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground font-medium">מחובר כ:</span>
@@ -341,7 +346,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* --- כרטיסייה 2: ניהול משפחה --- */}
+        {/* Family Management */}
         <Card className="max-w-3xl mx-auto shadow-sm border-purple-100 dark:border-purple-900/30">
             <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg text-purple-600">
@@ -354,7 +359,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
                 
-                {/* רשימת חברי משפחה */}
+                {/* Family Members */}
                 {familyMembers.length > 0 && (
                     <div className="space-y-3">
                         <Label>חברי המשפחה:</Label>
@@ -379,7 +384,7 @@ export default function SettingsPage() {
 
                 <div className="border-t"></div>
 
-                {/* הקוד שלי */}
+                {/* Family Code */}
                 <div className="space-y-2">
                     <Label>קוד המשפחה שלי (להזמנה):</Label>
                     <div className="flex gap-2">
@@ -390,7 +395,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
 
-                {/* הצטרפות לאחר */}
+                {/* Joining Family */}
                 <div className="space-y-2">
                     <Label>הצטרף למשפחה אחרת:</Label>
                     <div className="flex gap-2">
@@ -408,26 +413,40 @@ export default function SettingsPage() {
             </CardContent>
         </Card>
 
-        {/* --- כרטיסייה 3: ניהול קטגוריות (הייתה 4, כעת 3) --- */}
+        {/* Category Management */}
         <Card className="max-w-3xl mx-auto shadow-sm">
             <CardHeader><CardTitle>ניהול קטגוריות</CardTitle></CardHeader>
             <CardContent>
                 <ul className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                 {categories.map((category) => {
-                    const Icon = getIconComponent(category.iconName);
-                    return (
-                    <li key={category.id} className="flex items-center justify-between rounded-md border p-2">
-                        <div className="flex items-center gap-3">
-                        <Icon className={`h-6 w-6 ${category.color}`} />
+                  const Icon = getIconComponent(category.iconName);
+                  return (
+                  <li key={category.id} className="flex items-center justify-between rounded-md border p-2">
+                    <div className="flex items-center gap-3">
+                      <Icon className={`h-6 w-6 ${category.color}`} />
+                      <div className="flex flex-col">
                         <span className="font-medium">{category.name_he}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => handleEditCategory(category)}>ערוך</Button>
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteCategory(category.id)}><Trash2 className="h-4 w-4" /></Button>
-                        </div>
-                    </li>
-                    );
-                })}
+                        {category.showOnDashboard && (
+                          <span className="text-[10px] text-primary bg-primary/10 w-fit px-1.5 rounded-sm">
+                            מוצג בדאשבורד
+                            </span>
+                          )}
+                          <span className={`text-[10px] w-fit px-1.5 rounded-sm font-medium ${
+  category.type === 'income' 
+    ? 'text-emerald-600 bg-emerald-100' 
+    : 'text-rose-600 bg-rose-100'
+}`}>
+  {category.type === 'income' ? 'הכנסה' : 'הוצאה'}
+</span>
+                          </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => handleEditCategory(category)}>ערוך</Button>
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDeleteCategory(category.id)}><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                          </li>
+                          );
+                          })}
                 </ul>
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row gap-4 justify-between border-t pt-4">
@@ -439,7 +458,7 @@ export default function SettingsPage() {
             </CardFooter>
         </Card>
 
-        {/* --- אזור מסוכן --- */}
+        {/* Danger Zone */}
         <Card className="max-w-3xl mx-auto shadow-sm border-red-100 dark:border-red-900/30">
             <CardHeader><CardTitle className="text-red-600 flex items-center gap-2 text-lg"><ShieldAlert className="h-5 w-5" /> אזור מסוכן</CardTitle></CardHeader>
             <CardContent>
@@ -469,15 +488,21 @@ export default function SettingsPage() {
 
       </div>
 
-      {/* דיאלוג עריכת קטגוריה */}
+      {/* Category Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader><DialogTitle>{editingCategory ? 'עריכת קטגוריה' : 'הוספת קטגוריה'}</DialogTitle></DialogHeader>
-          <CategoryForm category={editingCategory} onSave={handleSaveCategory} onCancel={handleCancelEdit} iconMap={iconMap} getIconComponent={getIconComponent} />
+          <CategoryForm 
+            category={editingCategory} 
+            onSave={handleSaveCategory} 
+            onCancel={handleCancelEdit} 
+            iconMap={iconMap} 
+            getIconComponent={getIconComponent}
+            activeCount={activeCount} />
         </DialogContent>
       </Dialog>
 
-      {/* דיאלוג עריכת שם (פרופיל) */}
+      {/* Profile Name Edit Dialog */}
       <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>

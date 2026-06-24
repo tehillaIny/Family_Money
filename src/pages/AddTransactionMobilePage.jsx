@@ -46,9 +46,7 @@ const AddTransactionMobilePage = () => {
   const { toast } = useToast();
 
   const transactionToEdit = location.state?.transactionToEdit;
-  const transactionToDuplicate = location.state?.transactionToDuplicate; // <-- הוספנו את המשתנה החדש!
-  
-  // מקור הנתונים שלנו: אם יש עריכה נשתמש בה, אם יש שכפול נשתמש בו
+  const transactionToDuplicate = location.state?.transactionToDuplicate;
   const sourceData = transactionToEdit || transactionToDuplicate;
 
   const editMode = location.state?.editMode;
@@ -56,14 +54,15 @@ const AddTransactionMobilePage = () => {
   const preselectedType = location.state?.type;
   const currentMonthDateFromNav = location.state?.currentMonthDate ? new Date(location.state.currentMonthDate) : new Date(contextCurrentDate);
 
-  // משיכת נתוני הבסיס (סכום, קטגוריה, סוג, תגיות) מתוך מקור הנתונים (עריכה או שכפול)
+  const initialStep = (sourceData || preselectedCategoryId) ? 2 : 1;
+  const [step, setStep] = useState(initialStep);
+  const [gridType, setGridType] = useState(preselectedType || 'expense');
+
   const [amountStr, setAmountStr] = useState(sourceData ? String(Math.abs(sourceData.amount)) : '0');
   const [description, setDescription] = useState(sourceData ? sourceData.description || '' : '');
   const [type, setType] = useState(sourceData ? sourceData.type : preselectedType || 'expense');
   const [selectedCategoryId, setSelectedCategoryId] = useState(sourceData ? sourceData.categoryId : preselectedCategoryId || '');
   const [tagsStr, setTagsStr] = useState(sourceData?.tags?.join(', ') || '');
-
-  // תאריך: אם זו *עריכה* ניקח את התאריך המקורי. אם זה *שכפול* (או עסקה חדשה), ניקח את התאריך של היום/החודש הנבחר!
   const [selectedDate, setSelectedDate] = useState(transactionToEdit ? new Date(transactionToEdit.date) : currentMonthDateFromNav);
 
   const [isRecurring, setIsRecurring] = useState(sourceData?.recurring || false);
@@ -74,7 +73,6 @@ const AddTransactionMobilePage = () => {
   const [recurrenceOccurrences, setRecurrenceOccurrences] = useState(sourceData?.recurrenceOccurrences || 12);
 
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
-  const calendarConfirmRef = useRef();
 
   useEffect(() => {
     if (!sourceData && preselectedCategoryId) {
@@ -95,6 +93,20 @@ const AddTransactionMobilePage = () => {
     }
   };
 
+  const handleBackClick = () => {
+    if (step === 2 && initialStep === 1) {
+      setStep(1);
+    } else {
+      navigate(-1);
+    }
+  };
+
+  const handleCategoryGridSelect = (categoryId, categoryType) => {
+    setSelectedCategoryId(categoryId);
+    setType(categoryType || 'expense');
+    setStep(2);
+  };
+
   const handleSubmit = () => {
     const finalAmount = parseFloat(amountStr);
     if (isNaN(finalAmount) || finalAmount <= 0) {
@@ -111,7 +123,7 @@ const AddTransactionMobilePage = () => {
     const formattedRecurrenceEndDate = recurrenceEndDate ? format(recurrenceEndDate, 'yyyy-MM-dd') : null;
 
     const transactionData = {
-      id: transactionToEdit?.id, // אם זה שכפול, לא יהיה פה ID וזה ייצור עסקה חדשה לגמרי!
+      id: transactionToEdit?.id, 
       type,
       amount: finalAmount,
       categoryId: selectedCategoryId,
@@ -129,17 +141,10 @@ const AddTransactionMobilePage = () => {
     if (transactionToEdit) {
       if (editMode) {
         switch (editMode) {
-          case 'single':
-            editSingleTransaction(transactionData);
-            break;
-          case 'future':
-            editFromCurrentOnward(transactionToEdit, transactionData);
-            break;
-          case 'all':
-            editEntireSeries(transactionToEdit.originalId || transactionToEdit.id, transactionData);
-            break;
-          default:
-            updateTransaction(transactionData);
+          case 'single': editSingleTransaction(transactionData); break;
+          case 'future': editFromCurrentOnward(transactionToEdit, transactionData); break;
+          case 'all': editEntireSeries(transactionToEdit.originalId || transactionToEdit.id, transactionData); break;
+          default: updateTransaction(transactionData);
         }
       } else {
         updateTransaction(transactionData);
@@ -152,15 +157,69 @@ const AddTransactionMobilePage = () => {
 
     navigate(-1);
   };
-  
+
   const filteredCategories = categories.filter(cat => type === 'income' ? cat.type === 'income' : cat.type !== 'income' || !cat.type);
   const currentCategoryName = getCategoryById(selectedCategoryId)?.name_he || (type === 'income' ? 'בחר קטגורית הכנסה' : 'בחר קטגורית הוצאה');
+
+  if (step === 1) {
+    const gridCategories = categories.filter(cat => gridType === 'income' ? cat.type === 'income' : cat.type !== 'income' || !cat.type);
+    
+    return (
+      <div className="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-background" dir="rtl">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <Button variant="ghost" size="icon" onClick={handleBackClick}>
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+          <h1 className="text-xl font-semibold">בחירת קטגוריה</h1>
+          <div className="w-10"></div>
+        </div>
+
+        {/* tabs: outcomes and incomes */}
+        <div className="flex justify-center mb-6">
+          <div className="bg-muted p-1 rounded-xl flex w-full max-w-sm">
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${gridType === 'expense' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              onClick={() => setGridType('expense')}
+            >
+              הוצאה
+            </button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${gridType === 'income' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground'}`}
+              onClick={() => setGridType('income')}
+            >
+              הכנסה
+            </button>
+          </div>
+        </div>
+
+        {/* Category Grid */}
+        <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-6">
+          {gridCategories.map(cat => {
+            const Icon = getIconComponent(cat.iconName) || DollarSign;
+            return (
+              <div 
+                key={cat.id} 
+                className="flex flex-col items-center justify-center p-4 rounded-2xl bg-muted/40 active:bg-muted/80 cursor-pointer transition-all hover:scale-105"
+                onClick={() => handleCategoryGridSelect(cat.id, cat.type)}
+              >
+                <div className={`p-3 rounded-full bg-background shadow-sm border border-border/50 mb-3`}>
+                  <Icon className={`h-6 w-6 ${cat.color || 'text-primary'}`} />
+                </div>
+                <span className="text-xs text-center font-medium leading-tight text-foreground/80">{cat.name_he}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-background" dir="rtl">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="icon" onClick={handleBackClick}>
           <ArrowLeft className="h-6 w-6" />
         </Button>
         <h1 className="text-xl font-semibold">
@@ -233,7 +292,7 @@ const AddTransactionMobilePage = () => {
           </Select>
         </div>
 
-        {/* קטגוריה */}
+        {/* Category */}
         <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
           <SelectTrigger className="h-12 w-full">
             <Tag className="ml-2 h-5 w-5 opacity-70" />
@@ -256,7 +315,7 @@ const AddTransactionMobilePage = () => {
           </SelectContent>
         </Select>
 
-        {/* תיאור */}
+        {/* description */}
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -264,7 +323,7 @@ const AddTransactionMobilePage = () => {
           className="h-12"
         />
 
-        {/* תגיות */}
+        {/* tags */}
         <div className="relative">
           <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <div className="pl-10">
@@ -275,7 +334,7 @@ const AddTransactionMobilePage = () => {
           </div>
         </div>
 
-        {/* תזמון חוזר */}
+        {/* Re-scheduling */}
         <div className="space-y-2">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={isRecurring} onChange={() => setIsRecurring(!isRecurring)} />
@@ -350,7 +409,7 @@ const AddTransactionMobilePage = () => {
           )}
         </div>
 
-        {/* מקלדת מספרים */}
+        {/* numbers keyboard */}
         <div className="grid grid-cols-3 gap-2 mt-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
             <NumpadButton key={num} value={String(num)} onClick={handleNumpadInput} />
