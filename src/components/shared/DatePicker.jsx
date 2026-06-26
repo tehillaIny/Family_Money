@@ -12,6 +12,8 @@ import {
 import { cn } from '@/lib/utils.js';
 
 export function DatePicker({ date, onDateChange, placeholder = 'בחר תאריך', className }) {
+  const currentYear = new Date().getFullYear();
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -34,8 +36,12 @@ export function DatePicker({ date, onDateChange, placeholder = 'בחר תארי�
           onSelect={onDateChange}
           initialFocus
           locale={he}
+          captionLayout="dropdown"
+          fromYear={currentYear - 20}
+          toYear={currentYear + 5}
+          classNames={{ caption_label: 'hidden' }}
         />
       </PopoverContent>
     </Popover>
   );
-} 
+}

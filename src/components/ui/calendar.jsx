@@ -20,6 +20,11 @@ function Calendar({
         month: 'space-y-4',
         caption: 'flex justify-center pt-1 relative items-center',
         caption_label: 'text-sm font-medium',
+        
+        caption_dropdowns: 'flex justify-center gap-2 w-full px-8', 
+        dropdown: 'text-sm font-medium bg-background cursor-pointer border border-input hover:bg-accent hover:text-accent-foreground rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary appearance-auto',
+        vhidden: 'sr-only',
+
         nav: 'space-x-1 flex items-center',
         nav_button: cn(
           buttonVariants({ variant: 'outline' }),
@@ -62,4 +67,3 @@ function Calendar({
 Calendar.displayName = 'Calendar';
 
 export { Calendar };
-  
