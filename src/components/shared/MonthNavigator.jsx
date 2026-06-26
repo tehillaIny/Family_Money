@@ -5,26 +5,32 @@ import { useData } from '@/hooks/useData.jsx';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { useSwipeable } from 'react-swipeable';
+import { toLocalISOString } from '@/lib/utils.js'; // הוספנו את הייבוא הזה
 
 const MonthNavigator = () => {
-  const { currentDate, setCurrentDate } = useData();
+  const { currentDate, setCurrentDate, loadHistoricalData } = useData();
 
   const changeMonth = (offset) => {
     const newDate = new Date(currentDate);
     newDate.setMonth(currentDate.getMonth() + offset);
     setCurrentDate(newDate);
+
+    if (offset < 0 && loadHistoricalData) {
+      const targetDate = new Date(newDate.getFullYear(), newDate.getMonth(), 1);
+      const targetDateStr = toLocalISOString(targetDate);
+      loadHistoricalData(targetDateStr);
+    }
   };
 
   const formattedDate = format(currentDate, 'LLLL yyyy', { locale: he });
 
-  // הגדרות החלקה
   const handlers = useSwipeable({
-    onSwipedLeft: () => changeMonth(1), // החלקה שמאלה => קדימה
-    onSwipedRight: () => changeMonth(-1), // החלקה ימינה => אחורה
-    delta: 30, // רגישות (pixels)
+    onSwipedLeft: () => changeMonth(1), 
+    onSwipedRight: () => changeMonth(-1), 
+    delta: 30, 
     preventScrollOnSwipe: true,
     trackTouch: true,
-    trackMouse: true, // שימושי גם במחשב
+    trackMouse: true, 
   });
 
   return (

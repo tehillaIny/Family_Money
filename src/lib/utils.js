@@ -38,32 +38,36 @@ export function formatDate(date) {
     return `${day}/${month}/${year}`;
 }
 
-export function exportTransactionsToCsv(transactions, categories = []) {
-    if (!transactions.length) return;
+export function exportTransactionsToCsv(transactions, categories, filename = 'transactions') {
+    if (!transactions || transactions.length === 0) return;
   
-    const headers = ["date", "type", "category", "amount", "tags", "notes"];
+    // כאן אנחנו מגדירים את העמודות (אפשר לשלוח אותן כפרמטר, אבל נשאיר כאן כרגע)
+    const headers = ["תאריך", "סוג", "קטגוריה", "סכום", "תגיות", "הערות"];
+    
     const csvRows = [
       headers.join(","),
       ...transactions.map((t) => {
-        const category = categories.find(c => c.id === t.categoryId);
+        // עכשיו ה-categories מגיע בצורה תקינה מהפרמטרים
+        const category = (Array.isArray(categories) ? categories : []).find(c => c.id === t.categoryId);
+        
         return [
           formatDate(t.date),
-          t.type,
-          category?.name_he || "",
-          t.amount,
-          Array.isArray(t.tags) ? t.tags.join(",") : "",
+          t.type === 'income' ? 'הכנסה' : 'הוצאה',
+          category?.name_he || "לא נמצאה",
+          t.amount || 0,
+          Array.isArray(t.tags) ? t.tags.join(";") : "",
           `"${(t.description || "").replace(/"/g, '""')}"`
         ].join(",");
       }),
     ];
   
-    const csvString = csvRows.join("\n");
-    const blob = new Blob([csvString], { type: "text/csv" });
+    const csvString = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
   
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transactions_${Date.now()}.csv`;
+    a.download = `${filename}_${Date.now()}.csv`;
     a.click();
   
     URL.revokeObjectURL(url);

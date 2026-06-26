@@ -187,6 +187,7 @@ export default function SettingsPage() {
   
   const {
     categories,
+    transactions,
     updateCategory,
     deleteCategory,
     addCategory,
@@ -452,7 +453,7 @@ export default function SettingsPage() {
             <CardFooter className="flex flex-col sm:flex-row gap-4 justify-between border-t pt-4">
                 <Button onClick={() => { setEditingCategory(null); setIsDialogOpen(true); }}>הוספת קטגוריה</Button>
                 <div className="flex gap-2">
-                    <CsvExportButton data={categories} filename="categories.csv" variant="outline">ייצוא</CsvExportButton>
+                  <CsvExportButton data={transactions} filename="transactions">ייצוא</CsvExportButton>
                     <CsvImport variant="outline" onImport={handleImportCategories}>ייבוא</CsvImport>
                 </div>
             </CardFooter>

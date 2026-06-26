@@ -14,13 +14,14 @@ const CsvExportButton = ({
 }) => {
   const { transactions } = useData();
   const exportData = data || transactions;
+  const { categories } = useData();
 
   return (
     <Button
       type="button"
       variant={variant}
       className={className}
-      onClick={() => exportTransactionsToCsv(exportData, filename, headers)}
+      onClick={() => exportTransactionsToCsv(exportData, categories, filename)}      
       disabled={!exportData.length}
       aria-disabled={!exportData.length}
       {...props}

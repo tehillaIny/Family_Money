@@ -23,6 +23,12 @@ export const DataProvider = ({ children }) => {
   const [categories, setCategories] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [deletedTransactions, setDeletedTransactions] = useState(new Map());
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [oldestLoadedDate, setOldestLoadedDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split('T')[0];
+  });
 
   // --- 1. Initial Data Fetching ---
   useEffect(() => {
@@ -129,6 +135,26 @@ export const DataProvider = ({ children }) => {
   const deleteTransaction = async (transactionId) => {
     setTransactions(prev => prev.filter(t => t.id !== transactionId));
     if (userId) await dbService.deleteTransaction(userId, transactionId);
+  };
+
+  const loadHistoricalData = async (targetDateStr) => {
+    if (targetDateStr >= oldestLoadedDate || isLoadingHistory) return;    
+    setIsLoadingHistory(true);
+    try {
+      const oldTransactions = await dbService.fetchOlderTransactions(userId, targetDateStr, oldestLoadedDate);
+      if (oldTransactions.length > 0) {
+        setTransactions(prev => {
+          const existingIds = new Set(prev.map(t => t.id));
+          const toAdd = oldTransactions.filter(t => !existingIds.has(t.id));
+          return [...prev, ...toAdd];
+        });
+      }
+      setOldestLoadedDate(targetDateStr);
+    } catch (error) {
+      console.error('Error loading historical data:', error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
   };
 
   // --- 4. Special Recurrence Handlers ---
@@ -283,7 +309,8 @@ export const DataProvider = ({ children }) => {
       getCategoryById, setCategories, updateCategory, addCategory, deleteCategory,
       deleteSingleTransaction, deleteEntireSeries, deleteFromCurrentOnward,
       editSingleTransaction, editEntireSeries, editFromCurrentOnward,
-      getIconComponent, resetUserData, iconMap, initialized, 
+      getIconComponent, resetUserData, iconMap, initialized, loadHistoricalData,
+      isLoadingHistory
     }}>
       {children}
     </DataContext.Provider>

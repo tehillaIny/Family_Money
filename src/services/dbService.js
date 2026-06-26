@@ -9,9 +9,9 @@ export const dbService = {
 
     const transactionsRef = collection(db, 'users', userId, 'transactions');
 
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const startDateStr = sixMonthsAgo.toISOString().split('T')[0];
+    const yearsAgo = new Date();
+    yearsAgo.setFullYear(yearsAgo.getFullYear() - 5);
+    const startDateStr = yearsAgo.toISOString().split('T')[0];
 
     const recentQuery = query(transactionsRef, where('date', '>=', startDateStr));
     const recentSnapshot = await getDocs(recentQuery);
@@ -119,6 +119,23 @@ export const dbService = {
     await batch.commit();
   },
   
+  async fetchOlderTransactions(userId, fromDateStr, toDateStr) {
+    if (!db || !userId) return [];
+    
+    const transactionsRef = collection(db, 'users', userId, 'transactions');
+    
+    const olderQuery = query(
+      transactionsRef, 
+      where('date', '>=', fromDateStr),
+      where('date', '<', toDateStr)
+    );
+    
+    const snapshot = await getDocs(olderQuery);
+    return snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(t => !t.deleted);
+  },
+
   generateId(userId) {
     return doc(collection(db, 'users', userId, 'transactions')).id;
   }

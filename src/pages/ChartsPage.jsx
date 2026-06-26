@@ -12,10 +12,10 @@ import { he } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { Calendar, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
-import { formatCurrency, formatDateHe } from '@/lib/utils.js';
+import { formatCurrency, formatDateHe, toLocalISOString } from '@/lib/utils.js';
 
 const ChartsPage = () => {
-  const { transactions, getCategoryById } = useData();
+  const { transactions, getCategoryById, loadHistoricalData } = useData();
   const now = new Date();
   
   const [startDate, setStartDate] = useState(startOfMonth(subMonths(now, 5)));
@@ -26,18 +26,29 @@ const ChartsPage = () => {
   });
 
   const handleShowFromYearStart = () => {
-    setStartDate(startOfYear(now));
+    const newStart = startOfYear(now);
+    setStartDate(newStart);
     setEndDate(endOfMonth(now));
+    if (loadHistoricalData) loadHistoricalData(toLocalISOString(newStart));
   };
 
   const handleShowSixMonths = () => {
-    setStartDate(startOfMonth(subMonths(now, 5)));
+    const newStart = startOfMonth(subMonths(now, 5));
+    setStartDate(newStart);
     setEndDate(endOfMonth(now));
+    if (loadHistoricalData) loadHistoricalData(toLocalISOString(newStart));
   };
 
   const handleShowLastYear = () => {
-    setStartDate(startOfMonth(subMonths(now, 11)));
+    const newStart = startOfMonth(subMonths(now, 11));
+    setStartDate(newStart);
     setEndDate(endOfMonth(now));
+    if (loadHistoricalData) loadHistoricalData(toLocalISOString(newStart));
+  };
+  
+  const handleStartDateChange = (date) => {
+    setStartDate(date);
+    if (loadHistoricalData) loadHistoricalData(toLocalISOString(date));
   };
 
   const transactionsInRange = useMemo(() => {
@@ -247,8 +258,7 @@ const ChartsPage = () => {
             <Button variant="outline" size="sm" onClick={handleShowFromYearStart} className="text-xs flex-1 max-w-[120px]">מתחילת השנה</Button>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <DatePicker date={startDate} onDateChange={setStartDate} className="w-[110px] text-xs h-8" />
-            <span className="text-xs text-muted-foreground">-</span>
+            <DatePicker date={startDate} onDateChange={handleStartDateChange} className="w-[110px] text-xs h-8" />            <span className="text-xs text-muted-foreground">-</span>
             <DatePicker date={endDate} onDateChange={setEndDate} className="w-[110px] text-xs h-8" />
           </div>
         </CardContent>

@@ -5,3 +5,4 @@ node_modules
 build/
 app/build/
 local.properties
+service-account-key.json
