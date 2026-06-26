@@ -3,7 +3,6 @@ const { getFirestore } = require('firebase-admin/firestore');
 
 const serviceAccount = require('./service-account-key.json');
 
-// אתחול החיבור ל-Firebase
 initializeApp({
   credential: cert(serviceAccount)
 });
@@ -36,9 +35,8 @@ async function runMigration() {
             console.log(`נמצאו ${snapshot.size} עסקאות. מתחיל העתקה...`);
 
             let skipped = 0;
-            let processed = 0; // מונה התקדמות
+            let processed = 0;
 
-            // מעבר על כל מסמך והעתקתו לנתיב החדש
             for (const document of snapshot.docs) {
                 const data = document.data();
                 const newRef = db.collection('users').doc(targetFamilyId).collection('transactions').doc(document.id);                
@@ -52,9 +50,7 @@ async function runMigration() {
                 }
 
                 processed++;
-                
-                // מדפיס עדכון כל 100 עסקאות כדי שתראי שהוא לא נתקע
-                if (processed % 100 === 0) {
+                                if (processed % 100 === 0) {
                     console.log(`⏳ התקדמות: עובדו ${processed} מתוך ${snapshot.size} עסקאות...`);
                 }
             }
@@ -64,7 +60,6 @@ async function runMigration() {
 
         console.log(`\n🎉 ההגירה הושלמה בהצלחה! סך הכל הועתקו ${totalMigrated} עסקאות חדשות.`);
         
-        // מנתק את החיבור ומסיים את הסקריפט
         process.exit(0); 
         
     } catch (error) {
@@ -73,5 +68,4 @@ async function runMigration() {
     }
 }
 
-// הפעלת הפונקציה
 runMigration();
