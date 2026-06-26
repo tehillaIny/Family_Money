@@ -103,9 +103,8 @@ const DashboardPage = () => {
 
           {dashboardDisplayCategories.map((category, index) => {
             const totalCategories = dashboardDisplayCategories.length;
-            const angle = (2 * Math.PI * index) / totalCategories - Math.PI / 2; 
-            const radius = 170; 
-            const x = radius * Math.cos(angle);
+            const angle = (2 * Math.PI * index) / totalCategories - Math.PI / 2;
+            const radius = typeof window !== 'undefined' && window.innerWidth < 400 ? 140 : 170;            const x = radius * Math.cos(angle);
             const y = radius * Math.sin(angle);
 
             return (

@@ -1,5 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import Layout from './components/Layout';
@@ -11,6 +11,30 @@ import AddTransactionMobilePage from './pages/AddTransactionMobilePage';
 import ReviewPage from './pages/ReviewPage';
 import ChartsPage from './pages/ChartsPage';
 import { Toaster } from "@/components/ui/toaster";
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+
+const BackButtonHandler = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      const backButtonListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+          navigate(-1);
+        } else {
+          CapacitorApp.exitApp();
+        }
+      });
+
+      return () => {
+        backButtonListener.remove();
+      };
+    }
+  }, [navigate]);
+
+  return null;
+};
 
 const AuthenticatedApp = () => {
   const { currentUser } = useAuth();
@@ -23,11 +47,8 @@ const AuthenticatedApp = () => {
         <Route index element={<DashboardPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="add-transaction" element={<AddTransactionMobilePage />} />
-        
-        {/* שני דפים נפרדים לגמרי */}
         <Route path="review" element={<ReviewPage />} />
         <Route path="charts" element={<ChartsPage />} />
-        
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 
@@ -41,6 +62,7 @@ function App() {
     <AuthProvider>
       <DataProvider>
         <Router>
+          <BackButtonHandler />
           <AuthenticatedApp />
           <Toaster />
         </Router>

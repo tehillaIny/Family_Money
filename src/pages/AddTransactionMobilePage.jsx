@@ -166,16 +166,14 @@ const AddTransactionMobilePage = () => {
     
     return (
       <div className="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-background" dir="rtl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 pt-2">
+          <div className="w-10"></div> 
+          <h1 className="text-xl font-semibold">בחירת קטגוריה</h1>
           <Button variant="ghost" size="icon" onClick={handleBackClick}>
             <ArrowLeft className="h-6 w-6" />
           </Button>
-          <h1 className="text-xl font-semibold">בחירת קטגוריה</h1>
-          <div className="w-10"></div>
         </div>
 
-        {/* tabs: outcomes and incomes */}
         <div className="flex justify-center mb-6">
           <div className="bg-muted p-1 rounded-xl flex w-full max-w-sm">
             <button
@@ -193,7 +191,6 @@ const AddTransactionMobilePage = () => {
           </div>
         </div>
 
-        {/* Category Grid */}
         <div className="grid grid-cols-3 gap-4 overflow-y-auto pb-6">
           {gridCategories.map(cat => {
             const Icon = getIconComponent(cat.iconName) || DollarSign;
@@ -217,20 +214,21 @@ const AddTransactionMobilePage = () => {
 
   return (
     <div className="flex flex-col h-full max-h-screen p-4 sm:p-6 bg-background" dir="rtl">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <Button variant="ghost" size="icon" onClick={handleBackClick}>
-          <ArrowLeft className="h-6 w-6" />
-        </Button>
+      <div className="flex items-center justify-between mb-4 pt-2">
+        <div className="w-10"></div>
         <h1 className="text-xl font-semibold">
           {transactionToEdit ? 'עריכת עסקה' : (transactionToDuplicate ? 'שכפול עסקה' : 'הוספת עסקה חדשה')}
         </h1>
-        <Button variant="ghost" size="icon" onClick={handleSubmit}>
-          <CheckCircle className="h-6 w-6 text-primary" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={handleSubmit}>
+            <CheckCircle className="h-6 w-6 text-primary" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleBackClick}>
+            <ArrowLeft className="h-6 w-6" />
+          </Button>
+        </div>
       </div>
 
-      {/* Scrollable Form Content */}
       <div className="overflow-y-auto flex-grow space-y-4 pb-4">
         <div className="p-4 bg-muted rounded-lg text-center">
           <span className={`text-4xl font-bold ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
@@ -242,7 +240,6 @@ const AddTransactionMobilePage = () => {
           </span>
         </div>
 
-        {/* Date & Type */}
         <div className="grid grid-cols-2 gap-3">
           <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
             <PopoverTrigger asChild>
@@ -292,7 +289,6 @@ const AddTransactionMobilePage = () => {
           </Select>
         </div>
 
-        {/* Category */}
         <Select value={selectedCategoryId} onValueChange={setSelectedCategoryId}>
           <SelectTrigger className="h-12 w-full">
             <Tag className="ml-2 h-5 w-5 opacity-70" />
@@ -315,7 +311,6 @@ const AddTransactionMobilePage = () => {
           </SelectContent>
         </Select>
 
-        {/* description */}
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -323,7 +318,6 @@ const AddTransactionMobilePage = () => {
           className="h-12"
         />
 
-        {/* tags */}
         <div className="relative">
           <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <div className="pl-10">
@@ -334,7 +328,6 @@ const AddTransactionMobilePage = () => {
           </div>
         </div>
 
-        {/* Re-scheduling */}
         <div className="space-y-2">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={isRecurring} onChange={() => setIsRecurring(!isRecurring)} />
@@ -409,7 +402,6 @@ const AddTransactionMobilePage = () => {
           )}
         </div>
 
-        {/* numbers keyboard */}
         <div className="grid grid-cols-3 gap-2 mt-4">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
             <NumpadButton key={num} value={String(num)} onClick={handleNumpadInput} />
