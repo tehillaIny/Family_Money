@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useData } from '@/hooks/useData.jsx';
@@ -16,6 +16,25 @@ const DashboardPage = () => {
     transactions,
     currentDate 
   } = useData();
+
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const calculateScale = () => {
+      if (typeof window !== 'undefined') {
+        const screenWidth = window.innerWidth;
+        if (screenWidth < 440) {
+          setScale((screenWidth - 10) / 440);
+        } else {
+          setScale(1);
+        }
+      }
+    };
+
+    calculateScale();
+    window.addEventListener('resize', calculateScale);
+    return () => window.removeEventListener('resize', calculateScale);
+  }, []);
 
   const { income, expenses } = useMemo(() => {
     return getBalanceForMonth();
@@ -73,51 +92,70 @@ const DashboardPage = () => {
 
         <div className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl -z-10 pointer-events-none" />
 
-        <motion.div variants={itemVariants} className="relative w-full h-[420px] sm:h-[480px] mx-auto -mt-2">
+        <motion.div 
+          variants={itemVariants} 
+          className="relative w-full h-[420px] sm:h-[480px] mx-auto -mt-2 flex items-center justify-center"
+        >
           
-          <BalancePieChart income={income} expenses={expenses} />
-
-          <div
-            onClick={handleAddIncomeClick} role="button" tabIndex={0}
-            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full flex flex-col items-center justify-center cursor-pointer z-10 hover:scale-105 transition-transform duration-200 bg-background/50 backdrop-blur-sm border border-white/20 shadow-inner"
-            aria-label="הוסף הכנסה"
+          <div 
+            className="relative"
+            style={{ 
+              width: '440px', 
+              height: '440px', 
+              transform: `scale(${scale})`, 
+              transformOrigin: 'center center' 
+            }}
           >
-            <div className="flex flex-col items-center justify-center h-full select-none text-center space-y-1">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הכנסות</span>
-              <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-tight">
-                {formatCurrency(income)}
-              </span>
-              
-              <div className="w-8 h-[2px] bg-border/60 my-1 rounded-full"></div>
+            
+            <div className="absolute inset-0">
+              <BalancePieChart income={income} expenses={expenses} />
+            </div>
 
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הוצאות</span>
-              <span className="text-lg font-bold text-rose-500 dark:text-rose-400 font-sans tracking-tight">
-                {formatCurrency(Math.abs(expenses))}
-              </span>
-              
-              <div className="mt-2 text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-                 יתרה: {formatCurrency(income - expenses)}
+            <div
+              onClick={handleAddIncomeClick} role="button" tabIndex={0}
+              className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-44 h-44 rounded-full flex flex-col items-center justify-center cursor-pointer z-10 hover:scale-105 transition-transform duration-200 bg-background/50 backdrop-blur-sm border border-white/20 shadow-inner"
+              aria-label="הוסף הכנסה"
+            >
+              <div className="flex flex-col items-center justify-center h-full select-none text-center space-y-1">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הכנסות</span>
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400 font-sans tracking-tight">
+                  {formatCurrency(income)}
+                </span>
+                
+                <div className="w-8 h-[2px] bg-border/60 my-1 rounded-full"></div>
+
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">הוצאות</span>
+                <span className="text-lg font-bold text-rose-500 dark:text-rose-400 font-sans tracking-tight">
+                  {formatCurrency(Math.abs(expenses))}
+                </span>
+                
+                <div className="mt-2 text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                   יתרה: {formatCurrency(income - expenses)}
+                </div>
               </div>
             </div>
+
+            {dashboardDisplayCategories.map((category, index) => {
+              const totalCategories = dashboardDisplayCategories.length;
+              const angle = (2 * Math.PI * index) / totalCategories - Math.PI / 2;
+              
+              const radius = 175; 
+              const x = radius * Math.cos(angle);
+              const y = radius * Math.sin(angle);
+
+              return (
+                <CategoryCircleItem
+                  key={category.id}
+                  category={category}
+                  x={x}
+                  y={y}
+                  onClick={handleCategoryClick}
+                  formatCurrency={formatCurrency}
+                />
+              );
+            })}
+
           </div>
-
-          {dashboardDisplayCategories.map((category, index) => {
-            const totalCategories = dashboardDisplayCategories.length;
-            const angle = (2 * Math.PI * index) / totalCategories - Math.PI / 2;
-            const radius = typeof window !== 'undefined' && window.innerWidth < 400 ? 140 : 170;            const x = radius * Math.cos(angle);
-            const y = radius * Math.sin(angle);
-
-            return (
-              <CategoryCircleItem
-                key={category.id}
-                category={category}
-                x={x}
-                y={y}
-                onClick={handleCategoryClick}
-                formatCurrency={formatCurrency}
-              />
-            );
-          })}
         </motion.div>
       </motion.div>
     </>

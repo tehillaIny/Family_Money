@@ -34,13 +34,14 @@ const BalancePieChart = ({ income, expenses }) => {
         </Pie>
         {income > 0 && (
           <Tooltip
+            wrapperStyle={{ zIndex: 100 }} 
             contentStyle={{ 
                 backgroundColor: 'hsl(var(--popover))',
                 color: 'hsl(var(--popover-foreground))',
                 fontSize: '0.85rem', 
                 borderRadius: '0.75rem', 
                 border: '1px solid hsl(var(--border))', 
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)' 
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
             }}
             itemStyle={{ color: 'hsl(var(--foreground))' }}
             formatter={(value, name) => [

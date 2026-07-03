@@ -44,7 +44,7 @@ const MonthNavigator = () => {
   });
 
   return (
-    <div className="flex flex-col items-center justify-center my-6">
+    <div className="flex flex-col items-center justify-center my-6" dir="rtl">
       
       <div
         {...handlers}

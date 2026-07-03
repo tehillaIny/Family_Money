@@ -28,7 +28,7 @@ const SideMenu = () => {
         <Button 
           variant="ghost" 
           size="icon" 
-          className="fixed top-4 right-4 z-[100] bg-background/80 backdrop-blur-sm"
+          className={`fixed top-4 right-4 bg-background/80 backdrop-blur-sm transition-opacity ${isOpen ? 'opacity-0 pointer-events-none' : 'z-[100]'}`}
         >
           <Menu className="h-6 w-6" />
         </Button>
@@ -37,7 +37,7 @@ const SideMenu = () => {
         side="right" 
         className="w-[300px] sm:w-[400px] border-l"
       >
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full pt-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold">תפריט</h2>
             <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
@@ -70,4 +70,4 @@ const SideMenu = () => {
   );
 };
 
-export default SideMenu; 
+export default SideMenu;

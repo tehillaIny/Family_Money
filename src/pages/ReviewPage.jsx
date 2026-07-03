@@ -127,7 +127,6 @@ const ReviewPage = () => {
     });
   };
 
-  // --- הפונקציה החדשה לשיתוף בוואטסאפ! ---
   const handleShareWhatsApp = () => {
     const monthName = format(currentDate, 'MMMM yyyy', { locale: he });
     const greeting = balance >= 0 
@@ -140,7 +139,6 @@ const ReviewPage = () => {
                  `💰 מאזן: ${formatCurrency(balance)}\n\n` +
                  `${greeting}`;
                  
-    // פותח קישור לוואטסאפ (עובד גם בנייד וגם במחשב)
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -151,7 +149,7 @@ const ReviewPage = () => {
   return (
     <>
     <Header />
-    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-6 pb-16 px-2">
+    <motion.div initial="hidden" animate="visible" variants={containerVariants} className="space-y-6 pb-16 px-2" dir="rtl">
       <div className="pt-2">
         <h1 className="text-2xl font-bold text-foreground text-center mb-4">סקירה וניתוח</h1>
         
@@ -162,7 +160,9 @@ const ReviewPage = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
-            <MonthNavigator />
+            <div className="z-10 w-full flex justify-center mt-2">
+              <MonthNavigator />
+            </div>
             
             <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
               <Card className="clean-card py-3 sm:py-4">
@@ -188,7 +188,6 @@ const ReviewPage = () => {
               </Card>
             </div>
 
-            {/* כפתור שיתוף לוואטסאפ */}
             <button 
               onClick={handleShareWhatsApp}
               className="w-full flex items-center justify-center p-3 bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 rounded-xl transition-colors font-medium text-sm border border-[#25D366]/20 shadow-sm"
@@ -245,7 +244,6 @@ const ReviewPage = () => {
             </Card>
           </TabsContent>
 
-          {/* הוצאות קבועות - נשאר זהה לחלוטין לקוד הקודם */}
           <TabsContent value="recurring" className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
             <Card className="clean-card bg-primary/5 border-primary/20">
               <CardContent className="pt-6 flex flex-col items-center justify-center text-center">
@@ -292,7 +290,7 @@ const ReviewPage = () => {
 
                 {recurringExpenses.map(transaction => {
                   const categoryInfo = getCategoryById(transaction.categoryId);
-                  const IconComponent = categoryInfo ? getIconComponent(categoryInfo.iconName) : DollarSign;
+                  const IconComponent = categoryInfo ? getIconComponent(transaction.iconName) : DollarSign;
                   const categoryColor = categoryInfo ? categoryInfo.color : 'text-gray-500';
 
                   return (
