@@ -9,7 +9,6 @@ import {
 import { useData } from '@/hooks/useData.jsx';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { motion } from 'framer-motion';
 import { Calendar, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
 import { formatCurrency, formatDateHe, toLocalISOString } from '@/lib/utils.js';
@@ -24,6 +23,9 @@ const ChartsPage = () => {
   const [drillDownData, setDrillDownData] = useState({ 
     isOpen: false, title: '', amount: 0, transactions: [], subtitle: '' 
   });
+
+  // State חדש לסינון הקטגוריה מהעוגה לגרף החדש
+  const [selectedTrendCategoryId, setSelectedTrendCategoryId] = useState(null);
 
   const handleShowFromYearStart = () => {
     const newStart = startOfYear(now);
@@ -106,6 +108,45 @@ const ChartsPage = () => {
         };
       }).sort((a, b) => b.value - a.value);
   }, [transactionsInRange, getCategoryById]);
+
+  // עיבוד נתונים לגרף מגמות הקו של קטגוריה ספציפית
+  const categoryTrendMonthlyData = useMemo(() => {
+    if (!selectedTrendCategoryId) return [];
+
+    const months = [];
+    let currentDate = new Date(startDate);
+    currentDate.setDate(1);
+
+    while (currentDate <= endDate) {
+      const monthStart = startOfMonth(currentDate);
+      const monthEnd = endOfMonth(currentDate);
+
+      const monthAmount = transactions.filter(t => {
+        const transactionDate = new Date(t.date);
+        return t.type === 'expense' &&
+               t.categoryId === selectedTrendCategoryId &&
+               transactionDate >= monthStart &&
+               transactionDate <= monthEnd;
+      }).reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+
+      months.push({
+        name: format(currentDate, 'MMM', { locale: he }),
+        fullDate: format(currentDate, 'MMMM yyyy', { locale: he }),
+        amount: monthAmount
+      });
+
+      currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    }
+    return months;
+  }, [transactions, startDate, endDate, selectedTrendCategoryId]);
+
+  const selectedTrendCategoryInfo = useMemo(() => {
+    return selectedTrendCategoryId ? getCategoryById(selectedTrendCategoryId) : null;
+  }, [selectedTrendCategoryId, getCategoryById]);
+
+  const selectedCategoryPieData = useMemo(() => {
+    return categoryPieData.find(c => c.id === selectedTrendCategoryId);
+  }, [categoryPieData, selectedTrendCategoryId]);
 
   const fixedVsVariableData = useMemo(() => {
     const fixedTxs = [];
@@ -331,8 +372,20 @@ const ChartsPage = () => {
                 <div className="h-[220px] w-full" dir="ltr">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={categoryPieData} cx="50%" cy="50%" innerRadius={45} outerRadius={85} paddingAngle={2} dataKey="value" onClick={(d) => handlePieClick(d, 'פירוט הוצאות בקטגוריה')} labelLine={false} label={renderPercentLabel} className="cursor-pointer focus:outline-none">
-                        {categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.colorHex} className="hover:opacity-80 transition-opacity" />)}
+                      <Pie 
+                        data={categoryPieData} 
+                        cx="50%" cy="50%" innerRadius={45} outerRadius={85} paddingAngle={2} dataKey="value" 
+                        onClick={(d) => setSelectedTrendCategoryId(d.id === selectedTrendCategoryId ? null : d.id)} 
+                        labelLine={false} label={renderPercentLabel} className="cursor-pointer focus:outline-none"
+                      >
+                        {categoryPieData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={entry.colorHex} 
+                            style={{ opacity: selectedTrendCategoryId && selectedTrendCategoryId !== entry.id ? 0.3 : 1 }}
+                            className="hover:opacity-80 transition-all duration-300" 
+                          />
+                        ))}
                       </Pie>
                       <Tooltip formatter={(value) => formatCurrency(value)} contentStyle={{ borderRadius: '8px', textAlign: 'right', direction: 'rtl' }} />
                     </PieChart>
@@ -340,7 +393,11 @@ const ChartsPage = () => {
                 </div>
                 <div className="flex flex-wrap justify-center gap-3 px-2 pb-2">
                   {categoryPieData.map(cat => (
-                    <div key={cat.id} className="flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 p-1 rounded transition-colors" onClick={() => handlePieClick(cat)}>
+                    <div 
+                      key={cat.id} 
+                      className={`flex items-center gap-1.5 cursor-pointer hover:bg-muted/50 p-1 rounded transition-all duration-300 ${selectedTrendCategoryId && selectedTrendCategoryId !== cat.id ? 'opacity-40 grayscale-[0.5]' : ''}`} 
+                      onClick={() => setSelectedTrendCategoryId(cat.id === selectedTrendCategoryId ? null : cat.id)}
+                    >
                       <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: cat.colorHex }}></div>
                       <span className="text-xs font-medium">{cat.name} <span className="text-muted-foreground opacity-70">({formatCurrency(cat.value)})</span></span>
                     </div>
@@ -351,8 +408,60 @@ const ChartsPage = () => {
           </CardContent>
         </Card>
 
-        {/* --- קבועות מול משתנות --- */}
+        {/* --- מגמת הוצאות לקטגוריה נבחרת --- */}
         <Card className="clean-card overflow-hidden">
+          <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <LineChart className="h-5 w-5 text-primary" />
+              <CardTitle className="text-base font-bold">
+                מגמת הוצאות: {selectedTrendCategoryInfo ? selectedTrendCategoryInfo.name_he : 'בחר קטגוריה'}
+              </CardTitle>
+            </div>
+            {selectedTrendCategoryId && selectedCategoryPieData && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 text-xs px-2"
+                onClick={() => openDrillDown(selectedCategoryPieData.name, selectedCategoryPieData.value, selectedCategoryPieData.transactions, 'פירוט הוצאות בקטגוריה')}
+              >
+                פירוט עסקאות
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="p-4 mt-2">
+            {!selectedTrendCategoryId ? (
+              <div className="h-[220px] flex items-center justify-center text-center text-muted-foreground bg-muted/20 rounded-md border border-dashed border-muted/50 p-4">
+                <p className="text-sm">לחץ על קטגוריה בגרף העוגה<br/>כדי לראות את מגמת ההוצאות שלה</p>
+              </div>
+            ) : (
+              <div className="h-[220px] w-full" dir="ltr">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={categoryTrendMonthlyData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value} axisLine={false} tickLine={false} />
+                    <Tooltip 
+                      formatter={(value) => [formatCurrency(value), 'הוצאות']} 
+                      labelFormatter={(label) => `חודש ${label}`} 
+                      contentStyle={{ borderRadius: '8px', textAlign: 'right', direction: 'rtl' }} 
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="amount" 
+                      name="amount" 
+                      stroke={selectedTrendCategoryInfo?.colorHex || "#8b5cf6"} 
+                      strokeWidth={3} 
+                      dot={{ r: 4, fill: selectedTrendCategoryInfo?.colorHex || "#8b5cf6" }} 
+                      activeDot={{ r: 6 }} 
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* --- קבועות מול משתנות --- */}
+        <Card className="clean-card overflow-hidden md:col-span-2">
           <CardHeader className="p-4 pb-0 flex flex-row items-center gap-2">
             <Scale className="h-5 w-5 text-primary" />
             <CardTitle className="text-base font-bold">קבועות מול משתנות</CardTitle>
@@ -361,7 +470,7 @@ const ChartsPage = () => {
             {fixedVsVariableData.length === 0 ? (
               <p className="text-center text-muted-foreground py-10">אין הוצאות בתקופה זו.</p>
             ) : (
-              <div className="h-[220px] w-full" dir="ltr">
+              <div className="h-[220px] w-full md:w-1/2 mx-auto" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={fixedVsVariableData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value" onClick={(d) => handlePieClick(d, d.name)} labelLine={false} label={renderPercentLabel} className="cursor-pointer focus:outline-none">
@@ -434,7 +543,7 @@ const ChartsPage = () => {
               <CardTitle className="text-base font-bold">מקורות הכנסה</CardTitle>
             </CardHeader>
             <CardContent className="p-2 mt-2 flex flex-col items-center">
-              <div className="h-[220px] w-full" dir="ltr">
+              <div className="h-[220px] w-full md:w-1/2 mx-auto" dir="ltr">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={incomePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" onClick={(d) => handlePieClick(d, 'פירוט מקור הכנסה')} labelLine={false} label={renderPercentLabel} className="cursor-pointer focus:outline-none">
