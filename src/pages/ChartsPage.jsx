@@ -9,9 +9,10 @@ import { useData } from '@/hooks/useData.jsx';
 import { format, startOfMonth, endOfMonth, subMonths, startOfYear } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags, Filter } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags, Filter, Trash2 } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
 import { formatCurrency, formatDateHe, toLocalISOString } from '@/lib/utils.js';
+import { dbService } from '@/services/dbService.js'; // הוספנו ייבוא ישיר ל-DB לטובת הניקוי
 
 import MonthlyTrendChart from '@/components/charts/MonthlyTrendChart.jsx';
 import DistributionPieChart from '@/components/charts/DistributionPieChart.jsx';
@@ -28,7 +29,7 @@ const itemVariants = {
 };
 
 const ChartsPage = () => {
-  const { transactions, getCategoryById, loadHistoricalData, updateTransaction, editTransaction } = useData();
+  const { transactions, getCategoryById, loadHistoricalData, updateTransaction, editTransaction, deleteTransaction, userId } = useData();
   const now = new Date();
   
   const [startDate, setStartDate] = useState(startOfMonth(subMonths(now, 5)));
@@ -267,7 +268,6 @@ const ChartsPage = () => {
     openDrillDown(item.name, item.value, item.transactions, subtitle, sourceChart);
   };
 
-  // מנגנון חדש שעובד קודם על תווית ורק אח"כ על קטגוריה!
   const toggleBulkFixed = (transaction, makeFixed) => {
     const saveFunc = updateTransaction || editTransaction;
     if (!saveFunc) return;
@@ -276,7 +276,6 @@ const ChartsPage = () => {
     const primaryTag = displayTags.length > 0 ? displayTags[0] : null;
     const categoryId = transaction.categoryId;
 
-    // 1. איתור העסקאות לשינוי (לפי תווית או קטגוריה)
     const txsToUpdate = transactions.filter(t => {
       if (primaryTag) {
         return (t.tags || []).includes(primaryTag);
@@ -285,7 +284,6 @@ const ChartsPage = () => {
       }
     });
     
-    // 2. עדכון מסד הנתונים
     txsToUpdate.forEach(t => {
       const currentTags = t.tags || [];
       const hasFixedTag = currentTags.includes('ממוצע_קבוע');
@@ -297,7 +295,6 @@ const ChartsPage = () => {
       }
     });
     
-    // 3. עדכון התצוגה המקומית
     setDrillDownData(prev => ({
       ...prev,
       transactions: prev.transactions.map(t => {
@@ -332,8 +329,10 @@ const ChartsPage = () => {
     <div className="container mx-auto p-2 pb-16">
       
       <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md pt-2 pb-3 -mx-2 px-2 shadow-sm mb-4">
-        <h1 className="text-xl font-bold text-foreground text-center mb-3 flex justify-center items-center gap-2">
-          <Filter className="w-5 h-5" /> ניתוח ומגמות
+        <h1 className="text-xl font-bold text-foreground text-center mb-3 flex flex-wrap justify-center items-center gap-2 relative">
+          <div className="flex items-center gap-2">
+            <Filter className="w-5 h-5" /> ניתוח ומגמות
+          </div>
         </h1>
         <Card className="clean-card m-0">
           <CardContent className="p-3 flex flex-col gap-3">
@@ -482,7 +481,6 @@ const ChartsPage = () => {
                const hasFixedTag = (t.tags || []).includes('ממוצע_קבוע');
                const displayTags = (t.tags || []).filter(tag => tag !== 'ממוצע_קבוע' && tag !== 'חד_פעמי');
                
-               // הגדרת השם של התווית או הקטגוריה עבור כפתור המתג
                const primaryTag = displayTags.length > 0 ? displayTags[0] : null;
                const entityName = primaryTag ? `תווית "${primaryTag}"` : `קטגוריית "${catInfo?.name_he || 'אחר'}"`;
                

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { dbService } from '../services/dbService';
 import { toLocalISOString } from '../lib/utils';
 
@@ -10,32 +10,37 @@ export const useRecurringTransactions = ({
   userId,
   addTransactions
 }) => {
+  // הנעילה שלנו - מונעת מ-React להריץ את הלולאה שוב כשהיא באמצע עבודה
+  const isProcessing = useRef(false);
+
   useEffect(() => {
-    if (!initialized || !transactions.length) return;
+    if (!initialized || !transactions.length || isProcessing.current) return;
 
     const generateFutureRecurringTransactions = async () => {
-      const todayStr = new Date().toISOString().split('T')[0];
+      isProcessing.current = true; // נועלים את הדלת
       
-      try {
-        const isAlreadySynced = await dbService.checkSyncStatus(userId, todayStr);
-        if (isAlreadySynced) return;
-      } catch (error) {
-        console.error('❌ Error checking sync status:', error);
-      }
-
       const futureTransactions = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
+      // מייצרים עסקאות ל-12 חודשים קדימה (במקום 3)
       const endDate = new Date(currentDate);
-      endDate.setMonth(endDate.getMonth() + 3);
+      endDate.setFullYear(endDate.getFullYear() + 1);
 
       const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
 
+      // חילוץ תאריך בטוח (מתעלם מ-T ומשעות אם פיירבייס הוסיף אותם)
       const parseLocalDate = (dateStr) => {
           if (!dateStr) return new Date();
-          const [y, m, d] = dateStr.split('-').map(Number);
+          const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+          const [y, m, d] = datePart.split('-').map(Number);
           return new Date(y, m - 1, d, 12, 0, 0); 
+      };
+
+      // פונקציית עזר להשוואת תאריכים נקייה 
+      const getDateOnly = (dateStr) => {
+        if (!dateStr) return '';
+        return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
       };
 
       for (const t of recurringTransactions) {
@@ -75,9 +80,13 @@ export const useRecurringTransactions = ({
 
         while (nextInstanceDate <= endByDate && count < maxCount) {
           const isoDate = toLocalISOString(nextInstanceDate);
+          const isoDateOnly = getDateOnly(isoDate);
+          
           const isDeleted = deletedTransactions.get(t.id)?.has(isoDate);
+          
+          // השוואה מדויקת על בסיס התאריך הנקי למניעת כפילויות
           const alreadyExists = transactions.some(
-            (tx) => (tx.originalId === t.id || tx.id === t.id) && tx.date === isoDate
+            (tx) => (tx.originalId === t.id || tx.id === t.id) && getDateOnly(tx.date) === isoDateOnly
           );
 
           if (!alreadyExists && !isDeleted && nextInstanceDate >= today) {
@@ -87,7 +96,7 @@ export const useRecurringTransactions = ({
               originalId: t.id,
               date: isoDate,
               recurring: false,
-              createdAt: Date.now()
+              createdAt: Date.now() // הוספנו את חותמת הזמן שהייתה חסרה!
             });
           }
 
@@ -100,13 +109,9 @@ export const useRecurringTransactions = ({
         await addTransactions(futureTransactions);
       }
 
-      try {
-        await dbService.updateSyncStatus(userId, todayStr);
-      } catch (error) {
-        console.error('❌ Error updating sync status:', error);
-      }
+      isProcessing.current = false; // פותחים את הדלת מחדש
     };
 
     generateFutureRecurringTransactions();
-  }, [initialized, transactions.length, deletedTransactions, currentDate, userId]); 
+  }, [initialized, transactions, deletedTransactions, currentDate, userId]); 
 };
