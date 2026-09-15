@@ -10,26 +10,23 @@ export const useRecurringTransactions = ({
   userId,
   addTransactions
 }) => {
-  // הנעילה שלנו - מונעת מ-React להריץ את הלולאה שוב כשהיא באמצע עבודה
   const isProcessing = useRef(false);
 
   useEffect(() => {
     if (!initialized || !transactions.length || isProcessing.current) return;
 
     const generateFutureRecurringTransactions = async () => {
-      isProcessing.current = true; // נועלים את הדלת
+      isProcessing.current = true;
       
       const futureTransactions = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // מייצרים עסקאות ל-12 חודשים קדימה (במקום 3)
       const endDate = new Date(currentDate);
       endDate.setFullYear(endDate.getFullYear() + 1);
 
       const recurringTransactions = transactions.filter(t => t.recurring && !t.originalId);
 
-      // חילוץ תאריך בטוח (מתעלם מ-T ומשעות אם פיירבייס הוסיף אותם)
       const parseLocalDate = (dateStr) => {
           if (!dateStr) return new Date();
           const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
@@ -37,7 +34,6 @@ export const useRecurringTransactions = ({
           return new Date(y, m - 1, d, 12, 0, 0); 
       };
 
-      // פונקציית עזר להשוואת תאריכים נקייה 
       const getDateOnly = (dateStr) => {
         if (!dateStr) return '';
         return dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
@@ -96,7 +92,7 @@ export const useRecurringTransactions = ({
               originalId: t.id,
               date: isoDate,
               recurring: false,
-              createdAt: Date.now() // הוספנו את חותמת הזמן שהייתה חסרה!
+              createdAt: Date.now()
             });
           }
 
@@ -109,7 +105,7 @@ export const useRecurringTransactions = ({
         await addTransactions(futureTransactions);
       }
 
-      isProcessing.current = false; // פותחים את הדלת מחדש
+      isProcessing.current = false;
     };
 
     generateFutureRecurringTransactions();

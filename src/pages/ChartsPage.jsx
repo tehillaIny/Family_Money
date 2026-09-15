@@ -12,7 +12,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags, Filter, Trash2 } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
 import { formatCurrency, formatDateHe, toLocalISOString } from '@/lib/utils.js';
-import { dbService } from '@/services/dbService.js'; // הוספנו ייבוא ישיר ל-DB לטובת הניקוי
+import { dbService } from '@/services/dbService.js';
 
 import MonthlyTrendChart from '@/components/charts/MonthlyTrendChart.jsx';
 import DistributionPieChart from '@/components/charts/DistributionPieChart.jsx';
@@ -40,7 +40,7 @@ const ChartsPage = () => {
   });
   
   const [selectedTrendCategoryId, setSelectedTrendCategoryId] = useState(null);
-
+  
   const handleShowFromYearStart = () => {
     const newStart = startOfYear(now);
     setStartDate(newStart);
@@ -323,7 +323,7 @@ const ChartsPage = () => {
   const totalProfit = totalIncome - totalExpenses;
 
   const showToggleInDrillDown = ['fixed_vs_variable_fixed', 'fixed_vs_variable_variable', 'top_expenses'].includes(drillDownData.sourceChart);
-
+  
   return (
     <>
     <div className="container mx-auto p-2 pb-16">
@@ -455,7 +455,6 @@ const ChartsPage = () => {
       </motion.div>
     </div>
 
-    {/* חלון ה-Drill Down */}
     <Dialog open={drillDownData.isOpen} onOpenChange={(isOpen) => setDrillDownData(prev => ({ ...prev, isOpen }))}>
       <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[85vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
