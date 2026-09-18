@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.jsx";
@@ -11,6 +11,7 @@ import { he } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, PieChart as PieChartIcon, LineChart, Scale, Trophy, Tags, Filter, Trash2 } from 'lucide-react';
 import { DatePicker } from '@/components/shared/DatePicker.jsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx';
 import { formatCurrency, formatDateHe, toLocalISOString } from '@/lib/utils.js';
 import { dbService } from '@/services/dbService.js';
 
@@ -40,6 +41,7 @@ const ChartsPage = () => {
   });
   
   const [selectedTrendCategoryId, setSelectedTrendCategoryId] = useState(null);
+  const [selectedTrendTag, setSelectedTrendTag] = useState(null);
   
   const handleShowFromYearStart = () => {
     const newStart = startOfYear(now);
@@ -123,6 +125,33 @@ const ChartsPage = () => {
       }).sort((a, b) => b.value - a.value);
   }, [transactionsInRange, getCategoryById]);
 
+  const availableTrendTags = useMemo(() => {
+    if (!selectedTrendCategoryId) return [];
+
+    return Array.from(new Set(
+      transactionsInRange
+        .filter(t => t.type === 'expense' && t.categoryId === selectedTrendCategoryId)
+        .flatMap(t => Array.isArray(t.tags) ? t.tags : [])
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b, 'he'));
+  }, [transactionsInRange, selectedTrendCategoryId]);
+
+  useEffect(() => {
+    if (selectedTrendTag && !availableTrendTags.includes(selectedTrendTag)) {
+      setSelectedTrendTag(null);
+    }
+  }, [availableTrendTags, selectedTrendTag]);
+
+  const selectedCategoryTrendTransactions = useMemo(() => {
+    if (!selectedTrendCategoryId) return [];
+
+    return transactionsInRange.filter(t =>
+      t.type === 'expense' &&
+      t.categoryId === selectedTrendCategoryId &&
+      (!selectedTrendTag || (Array.isArray(t.tags) && t.tags.includes(selectedTrendTag)))
+    );
+  }, [transactionsInRange, selectedTrendCategoryId, selectedTrendTag]);
+
   const categoryTrendMonthlyData = useMemo(() => {
     if (!selectedTrendCategoryId) return [];
     const months = [];
@@ -133,11 +162,9 @@ const ChartsPage = () => {
       const monthStart = startOfMonth(currentDate);
       const monthEnd = endOfMonth(currentDate);
 
-      const monthAmount = transactions.filter(t => {
+      const monthAmount = selectedCategoryTrendTransactions.filter(t => {
         const transactionDate = new Date(t.date);
-        return t.type === 'expense' &&
-               t.categoryId === selectedTrendCategoryId &&
-               transactionDate >= monthStart &&
+        return transactionDate >= monthStart &&
                transactionDate <= monthEnd;
       }).reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
 
@@ -149,10 +176,13 @@ const ChartsPage = () => {
       currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
     }
     return months;
-  }, [transactions, startDate, endDate, selectedTrendCategoryId]);
+  }, [selectedCategoryTrendTransactions, startDate, endDate, selectedTrendCategoryId]);
 
   const selectedTrendCategoryInfo = useMemo(() => selectedTrendCategoryId ? getCategoryById(selectedTrendCategoryId) : null, [selectedTrendCategoryId, getCategoryById]);
-  const selectedCategoryPieData = useMemo(() => categoryPieData.find(c => c.id === selectedTrendCategoryId), [categoryPieData, selectedTrendCategoryId]);
+  const selectedCategoryTrendTotal = useMemo(
+    () => selectedCategoryTrendTransactions.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0),
+    [selectedCategoryTrendTransactions]
+  );
 
   const fixedVsVariableData = useMemo(() => {
     const fixedTxs = [];
@@ -388,7 +418,10 @@ const ChartsPage = () => {
               title="לאן הלך הכסף?" 
               icon={PieChartIcon} 
               selectedId={selectedTrendCategoryId}
-              onPieClick={(item) => setSelectedTrendCategoryId(item.id === selectedTrendCategoryId ? null : item.id)} 
+              onPieClick={(item) => {
+                setSelectedTrendCategoryId(item.id === selectedTrendCategoryId ? null : item.id);
+                setSelectedTrendTag(null);
+              }}
               emptyMessage="לא נמצאו הוצאות בטווח התאריכים הנבחר."
             />
           </motion.div>
@@ -396,10 +429,33 @@ const ChartsPage = () => {
           <motion.div variants={itemVariants}>
              <CategoryTrendLineChart 
                 data={categoryTrendMonthlyData}
-                title={`מגמת הוצאות: ${selectedTrendCategoryInfo ? selectedTrendCategoryInfo.name_he : 'בחר קטגוריה'}`}
                 icon={LineChart}
                 categoryInfo={selectedTrendCategoryInfo}
-                onDetailsClick={() => openDrillDown(selectedCategoryPieData.name, selectedCategoryPieData.value, selectedCategoryPieData.transactions, 'פירוט הוצאות בקטגוריה', 'none')}
+                headerContent={selectedTrendCategoryInfo && (
+                  availableTrendTags.length > 0 ? (
+                    <Select value={selectedTrendTag || 'all'} onValueChange={value => setSelectedTrendTag(value === 'all' ? null : value)}>
+                      <SelectTrigger className="h-8 w-[150px] text-xs text-right" dir="rtl" aria-label="סינון לפי תגית">
+                        <SelectValue placeholder="כל התגיות" />
+                      </SelectTrigger>
+                      <SelectContent dir="rtl">
+                        <SelectItem className="text-right" value="all">כל התגיות</SelectItem>
+                        {availableTrendTags.map(tag => (
+                          <SelectItem className="text-right" key={tag} value={tag}>{tag}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">אין תגיות בתקופה זו</span>
+                  )
+                )}
+                title={`מגמת הוצאות: ${selectedTrendCategoryInfo ? selectedTrendCategoryInfo.name_he : 'בחר קטגוריה'}${selectedTrendTag ? ` • ${selectedTrendTag}` : ''}`}
+                onDetailsClick={() => openDrillDown(
+                  selectedTrendCategoryInfo.name_he,
+                  selectedCategoryTrendTotal,
+                  selectedCategoryTrendTransactions,
+                  selectedTrendTag ? `פירוט הוצאות בקטגוריה ובתגית "${selectedTrendTag}"` : 'פירוט הוצאות בקטגוריה',
+                  'none'
+                )}
              />
           </motion.div>
 

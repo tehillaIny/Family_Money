@@ -12,6 +12,7 @@ const CategoryTrendLineChart = ({
   icon: Icon, 
   categoryInfo, 
   onDetailsClick,
+  headerContent,
   className = "h-full"
 }) => {
   return (
@@ -23,6 +24,7 @@ const CategoryTrendLineChart = ({
             {title}
           </CardTitle>
         </div>
+        {headerContent}
         {categoryInfo && onDetailsClick && (
           <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={onDetailsClick}>
             פירוט
