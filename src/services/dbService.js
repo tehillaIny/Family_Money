@@ -1,6 +1,6 @@
 import { db } from '../firebase';
 import {
-  collection, getDocs, setDoc, deleteDoc, doc, writeBatch, query, where, getDoc
+  collection, getDocs, getDocsFromServer, setDoc, deleteDoc, doc, writeBatch, query, where, getDoc
 } from 'firebase/firestore';
 
 export const dbService = {
@@ -14,10 +14,10 @@ export const dbService = {
     const startDateStr = yearsAgo.toISOString().split('T')[0];
 
     const recentQuery = query(transactionsRef, where('date', '>=', startDateStr));
-    const recentSnapshot = await getDocs(recentQuery);
+    const recentSnapshot = await getDocsFromServer(recentQuery);
 
     const recurringQuery = query(transactionsRef, where('recurring', '==', true));
-    const recurringSnapshot = await getDocs(recurringQuery);
+    const recurringSnapshot = await getDocsFromServer(recurringQuery);
 
     const docsMap = new Map();
     recentSnapshot.docs.forEach(doc => docsMap.set(doc.id, doc));
@@ -26,7 +26,7 @@ export const dbService = {
     const allDocs = Array.from(docsMap.values());
 
     const loadedTransactions = allDocs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .map(doc => ({ ...doc.data(), id: doc.id }))
       .filter(t => !t.deleted);
 
     const deletedMap = new Map();
@@ -58,14 +58,17 @@ export const dbService = {
   },
 
   async saveTransaction(userId, id, transaction) {
-    await setDoc(doc(db, 'users', userId, 'transactions', id), transaction);
+    await setDoc(
+      doc(db, 'users', userId, 'transactions', id),
+      { ...transaction, id }
+    );
   },
 
   async saveTransactionsBatch(userId, transactionsArray) {
     const batch = writeBatch(db);
     transactionsArray.forEach(t => {
       const docRef = doc(db, 'users', userId, 'transactions', t.id);
-      batch.set(docRef, t);
+      batch.set(docRef, { ...t, id: t.id });
     });
     await batch.commit();
   },
@@ -90,7 +93,7 @@ export const dbService = {
       batch.delete(docRef); 
     });
     const parentDocRef = doc(db, 'users', userId, 'transactions', originalId);
-    batch.set(parentDocRef, updatedParent, { merge: true });
+    batch.set(parentDocRef, { ...updatedParent, id: originalId }, { merge: true });
     await batch.commit();
   },
 
@@ -132,7 +135,7 @@ export const dbService = {
     
     const snapshot = await getDocs(olderQuery);
     return snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .map(doc => ({ ...doc.data(), id: doc.id }))
         .filter(t => !t.deleted);
   },
 
